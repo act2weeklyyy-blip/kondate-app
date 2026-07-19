@@ -2212,17 +2212,21 @@ function WeeklyPlanSection({ mealPrefs, setMealPrefs, onApplyWeekPlan }) {
 function SeasonalSection() {
   const [status, setStatus] = useState("idle");
   const [errorMsg, setErrorMsg] = useState("");
-  const [result, setResult] = useState("");
+  const [result, setResult] = useState(null);
 
   async function handleFetch() {
     setStatus("loading");
     setErrorMsg("");
-    setResult("");
+    setResult(null);
     try {
       const now = /* @__PURE__ */ new Date();
-      const prompt = `\u4ECA\u306F${now.getMonth() + 1}\u6708\u3067\u3059\u3002\u65E5\u672C\u3067\u4ECA\u304C\u65EC\u306E\u98DF\u6750\u3092\u3001\u91CE\u83DC\u30FB\u9B5A\u4ECB\u30FB\u679C\u7269\u306B\u5206\u3051\u3066\u3001\u305D\u308C\u305E\u308C5\u3064\u7A0B\u5EA6\u65E5\u672C\u8A9E\u3067\u7C21\u6F54\u306B\u6559\u3048\u3066\u304F\u3060\u3055\u3044\u3002\u7B87\u6761\u66F8\u304D\u3067\u3001\u4F59\u8A08\u306A\u524D\u7F6E\u304D\u306F\u4E0D\u8981\u3067\u3059\u3002`;
+      const prompt = `\u4ECA\u306F${now.getMonth() + 1}\u6708\u3067\u3059\u3002\u65E5\u672C\u3067\u4ECA\u304C\u65EC\u306E\u98DF\u6750\u3092\u3001\u91CE\u83DC\u30FB\u9B5A\u4ECB\u30FB\u679C\u7269\u306B\u5206\u3051\u3066\u305D\u308C\u305E\u308C3\u3064\u9078\u3093\u3067\u304F\u3060\u3055\u3044\u3002\u305D\u308C\u305E\u308C\u306B\u3064\u3044\u3066\u3001(1)\u306A\u305C\u4ECA\u65EC\u306A\u306E\u304B\u30FB\u7F8E\u5473\u3057\u3055\u306E\u30DD\u30A4\u30F3\u30C8\u3092\u8CB7\u3044\u305F\u304F\u306A\u308B\u3088\u3046\u306B1\u6587\u3067\u3001(2)\u305D\u306E\u98DF\u6750\u3092\u4F7F\u3063\u305F\u5177\u4F53\u7684\u306A\u6599\u7406\u540D\u3092\u3001\u305D\u308C\u305E\u308C\u65E5\u672C\u8A9E\u3067\u8003\u3048\u3066\u304F\u3060\u3055\u3044\u3002\u6B21\u306EJSON\u5F62\u5F0F\u306E\u307F\u3092\u51FA\u529B\u3057\u3066\u304F\u3060\u3055\u3044(\u8AAC\u660E\u6587\u3084\u30B3\u30FC\u30C9\u30D6\u30ED\u30C3\u30AF\u8A18\u53F7\u306F\u4E00\u5207\u4E0D\u8981)\uFF1A{"categories": [{"category": "\u91CE\u83DC", "items": [{"name": "\u98DF\u6750\u540D", "reason": "\u65EC\u306E\u7406\u7531\u30FB\u9B45\u529B", "dish": "\u6599\u7406\u540D"}]}, {"category": "\u9B5A\u4ECB", "items": [...]}, {"category": "\u679C\u7269", "items": [...]}]}`;
       const text = await callGemini(prompt);
-      setResult(text);
+      const parsed = extractJson(text);
+      if (!parsed || !Array.isArray(parsed.categories)) {
+        throw new Error("\u8AAD\u307F\u53D6\u308A\u7D50\u679C\u3092\u89E3\u6790\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F\u3002");
+      }
+      setResult(parsed.categories);
       setStatus("done");
     } catch (err) {
       setErrorMsg(err.message || String(err));
@@ -2241,19 +2245,30 @@ function SeasonalSection() {
     status === "error" && /* @__PURE__ */ React.createElement("div", { style: { color: C.tomato, fontSize: 13, marginTop: 10 } }, errorMsg),
     result && /* @__PURE__ */ React.createElement(
       "div",
-      {
-        style: {
-          marginTop: 10,
-          fontSize: 13,
-          color: C.cream,
-          lineHeight: 1.8,
-          whiteSpace: "pre-wrap",
-          background: C.panel2,
-          borderRadius: 10,
-          padding: "12px 14px"
-        }
-      },
-      result
+      { style: { marginTop: 12, display: "flex", flexDirection: "column", gap: 14 } },
+      result.map((cat, ci) => /* @__PURE__ */ React.createElement(
+        "div",
+        { key: ci },
+        /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: "bold", color: C.mustard, marginBottom: 6 } }, cat.category),
+        /* @__PURE__ */ React.createElement(
+          "div",
+          { style: { display: "flex", flexDirection: "column", gap: 8 } },
+          (cat.items || []).map((item, ii) => /* @__PURE__ */ React.createElement(
+            "div",
+            {
+              key: ii,
+              style: { background: C.panel2, borderRadius: 10, padding: "10px 12px" }
+            },
+            /* @__PURE__ */ React.createElement("div", { style: { fontSize: 14, fontWeight: "bold", color: C.cream } }, item.name),
+            item.reason && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: C.cream, opacity: 0.85, marginTop: 4, lineHeight: 1.6 } }, item.reason),
+            item.dish && /* @__PURE__ */ React.createElement(
+              "div",
+              { style: { display: "inline-block", marginTop: 6, fontSize: 11, color: C.mustard, background: C.panel, borderRadius: 999, padding: "3px 10px" } },
+              "\u4F8B: " + item.dish
+            )
+          ))
+        )
+      ))
     )
   );
 }
