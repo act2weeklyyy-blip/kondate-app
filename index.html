@@ -6,13 +6,47 @@
 <title>今週のこんだて</title>
 <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 fill=%22%231C2B22%22/><text x=%2250%22 y=%2265%22 font-size=%2255%22 text-anchor=%22middle%22 fill=%22%23E8A33D%22>膳</text></svg>" />
 <style>
-  html, body { margin: 0; padding: 0; background: #FFFBF6; }
+  html, body { margin: 0; padding: 0; background: #FFFBF6; color: #2B231D; font-family: 'Inter', sans-serif; }
   * { box-sizing: border-box; }
-  .auth-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; text-align: center; font-family: sans-serif; background: #FFFBF6; }
-  .auth-btn { padding: 12px 24px; border-radius: 10px; border: none; cursor: pointer; font-weight: bold; font-size: 16px; margin: 10px 0; width: 100%; max-width: 300px; transition: opacity 0.2s; }
+  
+  /* 認証・初期画面 */
+  .auth-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; text-align: center; }
+  .auth-btn { padding: 12px 24px; border-radius: 10px; border: none; cursor: pointer; font-weight: bold; font-size: 14px; margin: 8px 0; width: 100%; max-width: 300px; transition: opacity 0.2s; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+  .auth-btn:active { opacity: 0.7; }
   .auth-btn-primary { background: #FF7A1A; color: white; }
   .auth-btn-outline { background: transparent; border: 2px solid #FF7A1A; color: #FF7A1A; }
-  .auth-input { width: 100%; max-width: 300px; padding: 12px; border: 1px solid #F0DFCB; border-radius: 8px; margin-bottom: 10px; font-size: 16px; outline: none; }
+  .auth-input { width: 100%; max-width: 300px; padding: 10px 12px; border: 1px solid #F0DFCB; border-radius: 8px; margin-bottom: 10px; font-size: 14px; outline: none; background: #FFE9D6; color: #2B231D; }
+  
+  /* ダイアログモーダル */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(10,15,11,0.65); display: flex; align-items: flex-end; justify-content: center; z-index: 50; }
+  .modal-container { background: #FFFBF6; border: 1px solid #F0DFCB; border-radius: 18px 18px 0 0; padding: 18px 18px 26px; width: 100%; maxWidth: 720px; maxHeight: 85vh; overflow-y: auto; }
+  
+  /* レイアウト */
+  .app-body { padding: 14px 16px 90px; maxWidth: 720px; margin: 0 auto; }
+  .spin { animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  
+  /* 献立カレンダー */
+  .week-container { background: #FFFFFF; border: 1px solid #F0DFCB; border-radius: 12px; overflow: hidden; margin-bottom: 16px; }
+  .week-day-row { display: flex; border-bottom: 1px solid #F0DFCB; }
+  .week-day-col { width: 34px; flex-shrink: 0; position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; border-right: 1px solid #F0DFCB; padding: 6px 2px; }
+  .slot-btn { flex: 1; min-height: 52px; position: relative; display: flex; align-items: center; justify-content: center; padding: 4px; background: transparent; border: none; cursor: pointer; }
+  .recipe-tag { font-size: 10.5px; color: #2B231D; line-height: 1.2; text-align: center; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  
+  /* カード・買い物パネル */
+  .card-panel { background: #FFFFFF; border: 1px dashed #F0DFCB; border-radius: 14px; padding: 16px; position: relative; }
+  .ai-card { background: #FFE9D6; border: 1px solid #F0DFCB; border-radius: 10px; padding: 12px; margin-bottom: 10px; }
+  .recipe-badge { background: #FFFFFF; border: 1px solid #F0DFCB; border-radius: 8px; padding: 5px 9px; font-size: 12.5px; color: #2B231D; cursor: pointer; line-height: 1.3; }
+  
+  /* 写真解析アイテム */
+  .photo-item { border-radius: 9px; padding: 10px 12px; margin-bottom: 8px; display: flex; flex-direction: column; }
+  .photo-item-checked { background: #FFE9D6; border: 1px solid #FF7A1A; }
+  .photo-item-unchecked { background: transparent; border: 1px solid #F0DFCB; }
+  
+  /* 買い物リスト */
+  .shopping-row { display: flex; align-items: center; gap: 10px; padding: 8px 2px; border-bottom: 1px dotted #F0DFCB; }
+  .shopping-checkbox { width: 19px; height: 19px; border-radius: 5px; border: 1.5px solid #9C897A; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }
+  .shopping-checkbox-checked { border-color: #FF7A1A; background: #FF7A1A; }
 </style>
 <script>
   window.__pendingErrors = [];
@@ -156,7 +190,7 @@ function BookOpen(p) { return <Icon {...p}><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 
 function ChevronDown(p) { return <Icon {...p}><polyline points="6 9 12 15 18 9" /></Icon>; }
 function Loader2(p) { return <Icon {...p}><path d="M21 12a9 9 0 1 1-6.219-8.56" /></Icon>; }
 
-// --- 3. 認証 & コントローラー ---
+// --- 3. 認証 & 家族ID管理 ---
 function App() {
   const [user, setUser] = useState(null);
   const [familyId, setFamilyId] = useState(null);
@@ -196,7 +230,7 @@ function App() {
 
   const resetFamilyId = async () => {
     if (!user) return;
-    if (confirm("本当にこの家族グループを抜けますか？\n（データは残りますが、別のコードを入れる画面に戻ります）")) {
+    if (confirm("本当にこの家族グループを抜けますか？\n（献立データは削除されませんが、招待コードを入力し直す画面に戻ります）")) {
       await db.ref(`users/${user.uid}/familyId`).remove();
       setFamilyId(null);
     }
@@ -206,7 +240,6 @@ function App() {
     return (
       <div style={{ ...styles.app, alignItems: "center", justifyContent: "center", display: "flex", height: "100vh" }}>
         <Loader2 className="spin" size={28} color={C.mustard} />
-        <style>{`.spin{animation:spin 1s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}`}</style>
       </div>
     );
   }
@@ -228,7 +261,6 @@ function App() {
   return <MealPlanner familyId={familyId} user={user} onLogout={() => auth.signOut()} onResetFamily={resetFamilyId} />;
 }
 
-// オンボーディング画面
 function FamilySetup({ onCreate, onJoin, onLogout }) {
   const [input, setInput] = useState("");
   return (
@@ -250,7 +282,8 @@ function MealPlanner({ familyId, user, onLogout, onResetFamily }) {
   const [recipes, setRecipes] = useState([]);
   const [planByWeek, setPlanByWeek] = useState({});
   const todayWeekStart = useMemo(() => sundayOf(new Date()), []);
-  const weekKey = toISODate(todayWeekStart);
+  const weekStart = todayWeekStart;
+  const weekKey = toISODate(weekStart);
   const week = planByWeek[weekKey] || emptyWeek();
   const [extraItems, setExtraItems] = useState([]);
   const [checked, setChecked] = useState({});
@@ -264,7 +297,6 @@ function MealPlanner({ familyId, user, onLogout, onResetFamily }) {
   const [newExtra, setNewExtra] = useState("");
   const skipNextSave = useRef(false);
 
-  // AI条件設定
   const [aiSettings, setAiSettings] = useState({ familySize: "大人2人", allergies: "なし", dislikes: "なし", preferences: "バランス重視" });
 
   useEffect(() => {
@@ -388,7 +420,7 @@ function MealPlanner({ familyId, user, onLogout, onResetFamily }) {
       <link rel="preconnect" href="https://fonts.googleapis.com" />
       <style>{FONT_IMPORT}</style>
       <Header familyId={familyId} saving={saving} onLogout={onLogout} onResetFamily={onResetFamily} />
-      <div style={styles.body}>
+      <div className="app-body">
         {tab === "plan" && <PlanView planByWeek={planByWeek} todayWeekStart={todayWeekStart} recipeMap={recipeMap} onPick={setPickerFor} onClear={clearSlot} />}
         {tab === "recipes" && <RecipesView recipes={recipes} onEdit={r => setRecipeForm({ category: null, ...r })} onNew={() => setRecipeForm({ id: null, name: "", category: null, ingredients: [{ id: uid(), name: "", amount: "" }] })} onImport={() => setImportOpen(true)} onPhotoImport={() => setPhotoImportOpen(true)} onUrlImport={() => setUrlImportOpen(true)} />}
         {tab === "shopping" && <ShoppingView list={shoppingList} extraItems={extraItems} checked={checked} onToggle={toggleCheck} newExtra={newExtra} setNewExtra={setNewExtra} onAddExtra={addExtra} onRemoveExtra={removeExtra} />}
@@ -422,7 +454,7 @@ function Header({ familyId, saving, onLogout, onResetFamily }) {
   );
 }
 
-// --- ナビゲーション ---
+// --- 下部ナビゲーション ---
 function BottomNav({ tab, setTab }) {
   const tabs = [{ key: "plan", label: "献立表", icon: CalendarDays }, { key: "shopping", label: "買い物リスト", icon: ShoppingCart }, { key: "recipes", label: "レシピ帳", icon: BookOpen }, { key: "ai", label: "AI提案", icon: ChefHat }];
   return (
@@ -461,10 +493,11 @@ function PlanView({ planByWeek, todayWeekStart, recipeMap, onPick, onClear }) {
 
 function WeekBlock({ weekStart, isFirst, plan, recipeMap, onPick, onClear }) {
   const wk = toISODate(weekStart); const todayISO = toISODate(new Date()); const weekEnd = addDays(weekStart, 6);
+  const rangeLabel = `${weekStart.getFullYear()}年 ${formatMonthDay(weekStart)} 〜 ${formatMonthDay(weekEnd)}`;
   return (
     <div>
-      <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 12, color: isFirst ? C.mustard : C.muted, padding: "10px 2px 8px" }}>{isFirst && "今週 ・ "}{weekStart.getFullYear()}年 {formatMonthDay(weekStart)} 〜 {formatMonthDay(weekEnd)}</div>
-      <div style={{ background: C.panel, border: `1px solid ${C.line}`, borderRadius: 12, overflow: "hidden" }}>
+      <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 12, color: isFirst ? C.mustard : C.muted, padding: "10px 2px 8px" }}>{isFirst && "今週 ・ "}{rangeLabel}</div>
+      <div className="week-container">
         <div style={{ display: "flex", borderBottom: `1px solid ${C.line}`, background: "#FFF1E2" }}>
           <div style={{ width: 34, flexShrink: 0 }} />
           {SLOTS.map((slot) => <div key={slot.key} style={{ flex: 1, textAlign: "center", fontSize: 10.5, fontWeight: 700, color: "#B8631A", padding: "6px 2px", fontFamily: "'Space Mono', monospace" }}>{slot.label}</div>)}
@@ -472,8 +505,8 @@ function WeekBlock({ weekStart, isFirst, plan, recipeMap, onPick, onClear }) {
         {DAYS.map((day, i) => {
           const dateForDay = addDays(weekStart, i); const isToday = toISODate(dateForDay) === todayISO; const isWeekend = i === 0 || i === 6;
           return (
-            <div key={day} style={{ display: "flex", borderBottom: i < 6 ? `1px solid ${C.line}` : "none", borderLeft: isToday ? `3px solid ${C.mustard}` : "3px solid transparent", background: isToday ? "linear-gradient(90deg, rgba(255,166,48,0.16), rgba(255,90,26,0.05) 60%)" : "transparent" }}>
-              <div style={{ width: 34, flexShrink: 0, position: "relative", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 1, borderRight: `1px solid ${C.line}`, padding: "6px 2px" }}>
+            <div key={day} className="week-day-row" style={{ borderLeft: isToday ? `3px solid ${C.mustard}` : "3px solid transparent", background: isToday ? "linear-gradient(90deg, rgba(255,166,48,0.16), rgba(255,90,26,0.05) 60%)" : "transparent" }}>
+              <div className="week-day-col">
                 {isToday && <span style={{ position: "absolute", top: 3, right: 3, width: 6, height: 6, borderRadius: "50%", background: "linear-gradient(135deg, #FFC24B, #FF5A1A)" }} />}
                 <span style={{ fontFamily: "'Kalam', cursive", fontSize: 14, color: isWeekend ? C.tomato : C.cream, lineHeight: 1 }}>{day}</span>
                 <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 9, color: isToday ? C.mustard : C.muted }}>{dateForDay.getDate()}</span>
@@ -481,10 +514,10 @@ function WeekBlock({ weekStart, isFirst, plan, recipeMap, onPick, onClear }) {
               {SLOTS.map((slot, si) => {
                 const rid = plan[day]?.[slot.key]; const recipe = rid ? recipeMap[rid] : null;
                 return (
-                  <button key={slot.key} onClick={() => onPick(wk, day, slot.key)} style={{ flex: 1, minHeight: 52, position: "relative", display: "flex", alignItems: "center", justifyContent: "center", padding: "4px 4px", background: "transparent", border: "none", borderRight: si < SLOTS.length - 1 ? `1px solid ${C.line}` : "none", cursor: "pointer" }}>
+                  <button key={slot.key} onClick={() => onPick(wk, day, slot.key)} className="slot-btn" style={{ borderRight: si < SLOTS.length - 1 ? `1px solid ${C.line}` : "none" }}>
                     {recipe ? (
                       <React.Fragment>
-                        <span style={{ fontSize: 10.5, color: C.cream, lineHeight: 1.2, textAlign: "center", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{recipe.name}</span>
+                        <span className="recipe-tag">{recipe.name}</span>
                         <span onClick={(e) => { e.stopPropagation(); onClear(wk, day, slot.key); }} style={{ position: "absolute", top: 1, right: 1, padding: 3, display: "flex" }}><X size={9} color={C.muted} /></span>
                       </React.Fragment>
                     ) : <Plus size={15} color={C.muted} strokeWidth={2.5} />}
@@ -499,7 +532,7 @@ function WeekBlock({ weekStart, isFirst, plan, recipeMap, onPick, onClear }) {
   );
 }
 
-// --- レシピモーダル & ビュー ---
+// --- レシピモーダル & アコーディオン ---
 function RecipePickerModal({ recipes, onPick, onClose }) {
   const [query, setQuery] = useState("");
   const groups = useMemo(() => {
@@ -515,7 +548,7 @@ function RecipePickerModal({ recipes, onPick, onClose }) {
           {groups.length === 0 ? <p style={{ color: C.muted, fontSize: 14 }}>一致するレシピがありません。</p> : groups.map(g => (
             <div key={g.category} style={{ marginBottom: 14 }}>
               <div style={{ fontFamily: "'Kalam', cursive", fontSize: 14, color: C.mustard, marginBottom: 6 }}>{g.category}<span style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, color: C.muted, marginLeft: 6 }}>{g.items.length}</span></div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>{g.items.map(r => <button key={r.id} onClick={() => onPick(r.id)} style={{ background: C.panel2, border: `1px solid ${C.line}`, borderRadius: 8, padding: "6px 10px", color: C.cream, fontSize: 13, cursor: "pointer" }}>{r.name}</button>)}</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>{g.items.map(r => <button key={r.id} onClick={() => onPick(r.id)} className="recipe-badge" style={{ background: C.panel2, border: `1px solid ${C.line}` }}>{r.name}</button>)}</div>
             </div>
           ))}
         </React.Fragment>
@@ -535,7 +568,7 @@ function RecipeCategoryGroup({ group, onEdit }) {
       </button>
       {open && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: 5, padding: "2px 2px 4px 21px" }}>
-          {group.items.map(r => <button key={r.id} onClick={() => onEdit(r)} style={{ background: C.panel, border: `1px solid ${r.ingredients?.length ? C.line : "rgba(156,137,122,0.35)"}`, borderRadius: 8, padding: "5px 9px", fontSize: 12.5, color: C.cream, cursor: "pointer", lineHeight: 1.3 }}>{r.name}</button>)}
+          {group.items.map(r => <button key={r.id} onClick={() => onEdit(r)} className="recipe-badge">{r.name}</button>)}
         </div>
       )}
     </div>
@@ -550,9 +583,9 @@ function RecipesView({ recipes, onEdit, onNew, onImport, onPhotoImport, onUrlImp
   return (
     <div>
       <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
-        <button onClick={onNew} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4, flex: 1, minWidth: 0, background: C.mustard, color: "#26210F", border: "none", borderRadius: 10, padding: "9px 4px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}><Plus size={14} />新しいレシピ</button>
-        <button onClick={onPhotoImport} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4, flex: 1, minWidth: 0, background: "transparent", color: C.tomato, border: `1px solid ${C.tomato}`, borderRadius: 10, padding: "9px 4px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>写真から追加</button>
-        <button onClick={onUrlImport} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4, flex: 1, minWidth: 0, background: "transparent", color: C.mustard, border: `1px solid ${C.mustard}`, borderRadius: 10, padding: "9px 4px", fontSize: 12.5, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>URLから追加</button>
+        <button onClick={onNew} className="auth-btn auth-btn-primary" style={{ flex: 1, margin: 0 }}><Plus size={14} />新しいレシピ</button>
+        <button onClick={onPhotoImport} className="auth-btn auth-btn-outline" style={{ flex: 1, margin: 0 }}>写真から追加</button>
+        <button onClick={onUrlImport} className="auth-btn auth-btn-outline" style={{ flex: 1, margin: 0 }}>URLから追加</button>
       </div>
       {recipes.length === 0 ? <p style={{ color: C.muted, fontSize: 14, textAlign: "center", marginTop: 20 }}>まだレシピがありません。「新しいレシピ」から追加しましょう。</p> : groups.map(g => <RecipeCategoryGroup key={g.category} group={g} onEdit={onEdit} />)}
       <button onClick={onImport} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", background: "transparent", color: C.muted, border: `1px dashed ${C.line}`, borderRadius: 10, padding: "12px", fontSize: 13, fontWeight: 600, cursor: "pointer", marginTop: 6 }}>一括インポート</button>
@@ -599,7 +632,7 @@ function PhotoImportModal({ onMerge, onClose }) {
     setStatus("loading"); setErrorMsg(""); setExtracted([]); setResultCount(null);
     try {
       const base64 = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result.split(",")[1]); r.onerror = rej; r.readAsDataURL(file); });
-      const prompt = "この画像に写っている料理レシピを抽出してください。次のJSON形式のみを出力してください(説明文やコードブロック記号は不要): [{\"name\": \"料理名\", \"ingredients\": [{\"name\": \"材料名\", \"amount\": \"分量\"}]}]";
+      const prompt = "この画像に写っている料理レシピを抽出してJSONのみ出力してください。フォーマット: [{\"name\": \"料理名\", \"ingredients\": [{\"name\": \"材料名\", \"amount\": \"分量\"}]}]";
       const res = await fetch(GEMINI_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: file.type || "image/jpeg", data: base64 } }] }] }) });
       if (!res.ok) throw new Error(`APIエラー (${res.status})`);
       const data = await res.json(); let text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
@@ -614,4 +647,175 @@ function PhotoImportModal({ onMerge, onClose }) {
       {extracted.length > 0 && resultCount === null && (
         <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14 }}>
           {extracted.map(it => (
-            <div key={it.id} style={{ back
+            <div key={it.id} className={`photo-item ${it.checked ? "photo-item-checked" : "photo-item-unchecked"}`}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}><span onClick={() => setExtracted(items => items.map(x => x.id===it.id ? { ...x, checked: !x.checked } : x))} className={`shopping-checkbox ${it.checked ? "shopping-checkbox-checked" : ""}`}>{it.checked && <Check size={11} color="#fff" strokeWidth={3} />}</span><input value={it.name} onChange={e => setExtracted(items => items.map(x => x.id===it.id ? { ...x, name: e.target.value } : x))} style={{ flex: 1, background: "transparent", border: "none", borderBottom: `1px dashed ${C.line}`, fontSize: 14, color: C.cream, outline: "none" }} /></div>
+              <div style={{ fontSize: 11, color: C.muted, marginTop: 4, marginLeft: 24 }}>{it.ingredients?.length ? it.ingredients.map(i => `${i.name}(${i.amount})`).join(" / ") : "材料未検出"}</div>
+            </div>
+          ))}
+        </div>
+      )}
+      {resultCount !== null && <p style={{ color: C.mustard, fontSize: 14, fontWeight: 700 }}>{resultCount}件のレシピを追加しました</p>}
+      <div style={{ display: "flex", gap: 8 }}>
+        <button onClick={onClose} style={secondaryBtnStyle}>{resultCount === null ? "キャンセル" : "閉じる"}</button>
+        {resultCount === null && extracted.length > 0 && <button onClick={() => setResultCount(onMerge(extracted.filter(it => it.checked)))} style={primaryBtnStyle} disabled={!extracted.some(it => it.checked)}>選択したレシピを追加</button>}
+      </div>
+    </Modal>
+  );
+}
+
+function UrlImportModal({ onMerge, onClose }) {
+  const [url, setUrl] = useState(""); const [status, setStatus] = useState("idle"); const [errorMsg, setErrorMsg] = useState(""); const [extracted, setExtracted] = useState([]); const [resultCount, setResultCount] = useState(null);
+  const handleFetch = async () => {
+    if (!url.trim()) return; setStatus("loading"); setErrorMsg(""); setExtracted([]); setResultCount(null);
+    try {
+      const prompt = `次のURLのページからレシピを抽出してJSONのみ出力。URL: ${url.trim()} フォーマット: [{"name": "料理名", "ingredients": [{"name": "材料名", "amount": "分量"}]}]`;
+      const res = await fetch(GEMINI_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], tools: [{ url_context: {} }] }) });
+      if (!res.ok) throw new Error("API通信エラー");
+      const data = await res.json(); let text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      const parsed = cleanAndParseJSON(text); setExtracted(parsed.map(r => ({ id: uid(), name: r.name?.trim() || "", ingredients: r.ingredients || [], checked: true }))); setStatus("done");
+    } catch (err) { setErrorMsg(err.message || String(err)); setStatus("error"); }
+  };
+  return (
+    <Modal onClose={onClose} title="URLからレシピを追加">
+      <p style={{ fontSize: 12, color: C.muted, marginTop: 0 }}>レシピサイトのURLから自動抽出します。</p>
+      {resultCount === null && (
+        <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
+          <input value={url} onChange={e => setUrl(e.target.value)} onKeyDown={e => e.key === "Enter" && handleFetch()} placeholder="https://..." disabled={status === "loading"} style={{ ...inputStyle, flex: 1 }} />
+          <button onClick={handleFetch} style={{ ...primaryBtnStyle, flex: "0 0 auto", padding: "0 16px" }} disabled={status === "loading" || !url.trim()}>{status === "loading" ? "読込中…" : "読み込む"}</button>
+        </div>
+      )}
+      {status === "error" && <div style={{ color: C.tomato, fontSize: 13, marginBottom: 12 }}>{errorMsg}</div>}
+      {extracted.length > 0 && resultCount === null && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14 }}>
+          {extracted.map(it => (
+            <div key={it.id} className={`photo-item ${it.checked ? "photo-item-checked" : "photo-item-unchecked"}`}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}><span onClick={() => setExtracted(items => items.map(x => x.id===it.id ? { ...x, checked: !x.checked } : x))} className={`shopping-checkbox ${it.checked ? "shopping-checkbox-checked" : ""}`}>{it.checked && <Check size={11} color="#fff" strokeWidth={3} />}</span><input value={it.name} onChange={e => setExtracted(items => items.map(x => x.id===it.id ? { ...x, name: e.target.value } : x))} style={{ flex: 1, background: "transparent", border: "none", borderBottom: `1px dashed ${C.line}`, fontSize: 14, color: C.cream, outline: "none" }} /></div>
+              <div style={{ fontSize: 11, color: C.muted, marginTop: 4, marginLeft: 24 }}>{it.ingredients?.length ? it.ingredients.map(i => `${i.name}(${i.amount})`).join(" / ") : "材料未検出"}</div>
+            </div>
+          ))}
+        </div>
+      )}
+      {resultCount !== null && <p style={{ color: C.mustard, fontSize: 14, fontWeight: 700 }}>{resultCount}件のレシピを追加しました</p>}
+      <div style={{ display: "flex", gap: 8 }}>
+        <button onClick={onClose} style={secondaryBtnStyle}>{resultCount === null ? "キャンセル" : "閉じる"}</button>
+        {resultCount === null && extracted.length > 0 && <button onClick={() => setResultCount(onMerge(extracted.filter(it => it.checked)))} style={primaryBtnStyle} disabled={!extracted.some(it => it.checked)}>選択したレシピを追加</button>}
+      </div>
+    </Modal>
+  );
+}
+
+function ImportModal({ onImport, onClose }) {
+  const [text, setText] = useState(""); const count = text.split(/[\n,、]/).map(s => s.trim()).filter(Boolean).length;
+  return (
+    <Modal onClose={onClose} title="レシピを一括インポート">
+      <p style={{ fontSize: 12, color: C.muted, marginTop: 0 }}>料理名を改行またはカンマ区切りで入力してください。</p>
+      <textarea value={text} onChange={e => setText(e.target.value)} placeholder="肉じゃが\n生姜焼き\nカレー" rows={10} style={{ ...inputStyle, resize: "vertical", fontFamily: "'Inter', sans-serif" }} />
+      <div style={{ fontSize: 11, color: C.muted, marginTop: 6 }}>{count}件を追加します</div>
+      <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+        <button onClick={onClose} style={secondaryBtnStyle}>キャンセル</button>
+        <button onClick={() => onImport(text)} style={primaryBtnStyle} disabled={!count}>インポート</button>
+      </div>
+    </Modal>
+  );
+}
+
+// --- 買い物ビュー & リスト行 ---
+function ShoppingView({ list, extraItems, checked, onToggle, newExtra, setNewExtra, onAddExtra, onRemoveExtra }) {
+  const grouped = useMemo(() => {
+    const byName = {};
+    list.forEach((item) => { byName[item.name] = { key: item.name, label: item.name, amounts: [...item.amounts], category: item.category || "その他", manualIds: [] }; });
+    extraItems.forEach((item) => {
+      const name = item.text.trim();
+      if (byName[name]) { byName[name].manualIds.push(item.id); }
+      else { byName[name] = { key: name, label: name, amounts: [], category: item.category || "その他", manualIds: [item.id] }; }
+    });
+    const unCh = []; const ch = [];
+    Object.values(byName).forEach((entry) => { if (checked[safeCheckKey(entry.key)]) ch.push(entry); else unCh.push(entry); });
+    const byCat = {}; unCh.forEach((entry) => { if (!byCat[entry.category]) byCat[entry.category] = []; byCat[entry.category].push(entry); });
+    const groups = CATEGORY_ORDER.filter((c) => byCat[c]?.length).map((c) => ({ category: c, items: byCat[c] }));
+    return { groups, doneEntries: ch };
+  }, [list, extraItems, checked]);
+
+  const allEntries = useMemo(() => [...grouped.groups.flatMap((g) => g.items), ...grouped.doneEntries], [grouped]);
+  const total = allEntries.length; const doneCount = grouped.doneEntries.length;
+  return (
+    <div>
+      <div style={{ background: C.panel, border: `1px dashed ${C.line}`, borderRadius: 14, padding: "16px 16px 8px", position: "relative" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
+          <span style={{ fontFamily: "'Kalam', cursive", fontSize: 20, color: C.mustard }}>買い物リスト</span>
+          <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 12, color: C.muted }}>{doneCount}/{total}</span>
+        </div>
+        {total === 0 ? <p style={{ color: C.muted, fontSize: 13, padding: "10px 0 16px" }}>献立表にレシピを割り当てると、材料が自動でここに集まります。</p> : (
+          <div style={{ display: "flex", flexDirection: "column" }}>
+            {grouped.groups.map((group) => (
+              <div key={group.category} style={{ marginBottom: 4 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: C.tomato, letterSpacing: 0.5, padding: "10px 2px 4px", textTransform: "uppercase" }}>{group.category}</div>
+                {group.items.map((entry) => <ShoppingRow key={entry.key} checked={false} onToggle={() => onToggle(safeCheckKey(entry.key))} label={entry.label} sub={entry.amounts.join(" + ")} onRemove={entry.manualIds.length ? () => entry.manualIds.forEach(id => onRemoveExtra(id)) : void 0} />)}
+              </div>
+            ))}
+            {grouped.doneEntries.length > 0 && (
+              <div style={{ marginBottom: 4 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 0.5, padding: "10px 2px 4px", textTransform: "uppercase" }}>済み(24時間後に自動で消えます)</div>
+                {grouped.doneEntries.map((entry) => <ShoppingRow key={entry.key} checked={true} onToggle={() => onToggle(safeCheckKey(entry.key))} label={entry.label} sub={entry.amounts.join(" + ")} onRemove={entry.manualIds.length ? () => entry.manualIds.forEach(id => onRemoveExtra(id)) : void 0} />)}
+              </div>
+            )}
+          </div>
+        )}
+        <div style={{ display: "flex", gap: 6, padding: "10px 0 4px" }}>
+          <input value={newExtra} onChange={(e) => setNewExtra(e.target.value)} onKeyDown={(e) => e.key === "Enter" && onAddExtra()} placeholder="ほしいものを追加(例: 卵)" style={{ ...inputStyle, background: "rgba(255,255,255,0.03)" }} />
+          <button onClick={onAddExtra} style={{ ...primaryBtnStyle, flex: "0 0 44px", padding: 0 }}><Plus size={16} style={{ margin: "0 auto" }} /></button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ShoppingRow({ checked, onToggle, label, sub, onRemove }) {
+  return (
+    <div className="shopping-row" style={{ opacity: checked ? 0.5 : 1 }}>
+      <button onClick={onToggle} className={`shopping-checkbox ${checked ? "shopping-checkbox-checked" : ""}`}>{checked && <Check size={12} color="#26210F" strokeWidth={3} />}</button>
+      <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 14, color: checked ? C.muted : C.cream, textDecoration: checked ? "line-through" : "none" }}>{label}</div>{sub && <div style={{ fontSize: 11, color: C.muted, fontFamily: "'Space Mono', monospace" }}>{sub}</div>}</div>
+      {onRemove && <button onClick={onRemove} style={iconBtnStyle}><X size={13} color={C.muted} /></button>}
+    </div>
+  );
+}
+
+// --- AIアシスタントビュー ---
+function AIView({ recipes, setRecipes, planByWeek, setPlanByWeek, weekKey, onAddExtra, aiSettings, setAiSettings }) {
+  const [subTab, setSubTab] = useState("fridge");
+  const [fridgeInput, setFridgeInput] = useState(""); const [fridgeLoading, setFridgeLoading] = useState(false); const [fridgeSuggestions, setFridgeSuggestions] = useState([]); const [fridgeSuccess, setFridgeSuccess] = useState({});
+  const [weeklyLoading, setWeeklyLoading] = useState(false); const [weeklyProposal, setWeeklyProposal] = useState(null); const [weeklySuccess, setWeeklySuccess] = useState(false);
+  const [seasonalMonth, setSeasonalMonth] = useState(new Date().getMonth() + 1); const [seasonalLoading, setSeasonalLoading] = useState(false); const [seasonalIngredients, setSeasonalIngredients] = useState([]); const [seasonalSuccess, setSeasonalSuccess] = useState({});
+
+  const handleFridgeSubmit = async () => {
+    if (!fridgeInput.trim()) return; setFridgeLoading(true); setFridgeSuggestions([]); setFridgeSuccess({});
+    try {
+      const prompt = `私は冷蔵庫に以下の食材を持っています：【${fridgeInput}】。家族構成：${aiSettings.familySize}、アレルギー：${aiSettings.allergies}、好き嫌い：${aiSettings.dislikes}、その他条件：${aiSettings.preferences}。冷蔵庫の食材を有効活用できる料理レシピを3つ提案してください。出力は必ず以下のJSONフォーマットのみとしてください（マークダウン記号は不要）：\n[{"name": "料理名", "category": "料理カテゴリ（麺類、ご飯・丼、粉物・パン、汁物・鍋、卵料理、魚介料理、肉料理、野菜・副菜、その他のいずれか）", "reason": "提案理由（20字程度）", "ingredients": [{"name": "材料名", "amount": "分量"}]}]`;
+      const res = await fetch(GEMINI_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }) });
+      if (!res.ok) throw new Error("APIエラー");
+      const data = await res.json(); const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      const parsed = cleanAndParseJSON(text); setFridgeSuggestions(parsed.map(r => ({ ...r, aiId: uid() })));
+    } catch (e) { alert("AI提案の取得に失敗しました。: " + e.message); } finally { setFridgeLoading(false); }
+  };
+
+  const addFridgeRecipe = (recipe) => {
+    const exists = recipes.some(r => r.name.trim() === recipe.name.trim());
+    if (exists) { setFridgeSuccess(prev => ({ ...prev, [recipe.aiId]: "登録済みです" })); return; }
+    const newRecipe = { id: uid(), name: recipe.name.trim(), category: recipe.category || "その他", ingredients: recipe.ingredients.map(i => ({ id: uid(), name: i.name, amount: i.amount })) };
+    setRecipes(prev => [...prev, newRecipe]); setFridgeSuccess(prev => ({ ...prev, [recipe.aiId]: "追加しました！" }));
+  };
+
+  const handleWeeklySubmit = async () => {
+    setWeeklyLoading(true); setWeeklyProposal(null); setWeeklySuccess(false);
+    try {
+      const prompt = `以下の家族の条件に基づいて、月曜日から日曜日までの1週間（朝・昼・晩）の献立プランを提案してください。家族構成：${aiSettings.familySize}、アレルギー：${aiSettings.allergies}、好き嫌い：${aiSettings.dislikes}、その他希望：${aiSettings.preferences}。朝・昼・晩×7日＝21個の料理を提案し、1週間の予定表に割り当ててください。出力は必ず以下のJSONフォーマットのみとしてください（マークダウン記号は不要）：\n{"recipes": [{"id": "recipe_1", "name": "料理名", "category": "カテゴリ名", "ingredients": [{"name": "材料名", "amount": "分量"}]}], "plan": {"月": {"breakfast": "recipe_1", "lunch": "recipe_1", "dinner": "recipe_1"}, "火": {"breakfast": "recipe_1", "lunch": "recipe_1", "dinner": "recipe_1"}, "水": {"breakfast": "recipe_1", "lunch": "recipe_1", "dinner": "recipe_1"}, "木": {"breakfast": "recipe_1", "lunch": "recipe_1", "dinner": "recipe_1"}, "金": {"breakfast": "recipe_1", "lunch": "recipe_1", "dinner": "recipe_1"}, "土": {"breakfast": "recipe_1", "lunch": "recipe_1", "dinner": "recipe_1"}, "日": {"breakfast": "recipe_1", "lunch": "recipe_1", "dinner": "recipe_1"}}}`;
+      const res = await fetch(GEMINI_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }) });
+      if (!res.ok) throw new Error("APIエラー");
+      const data = await res.json(); const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      const parsed = cleanAndParseJSON(text); setWeeklyProposal(parsed);
+    } catch (e) { alert("AI献立の作成に失敗しました。: " + e.message); } finally { setWeeklyLoading(false); }
+  };
+
+  const applyWeeklyPlan = () => {
+    if (!weeklyProposal) return;
+    const { recipes: propRecs, plan: propPlan } = weeklyProposal;
