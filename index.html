@@ -3,19 +3,57 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
-<title>家族のこんだて（共有版）</title>
+<title>今週のこんだて</title>
 <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 fill=%22%231C2B22%22/><text x=%2250%22 y=%2265%22 font-size=%2255%22 text-anchor=%22middle%22 fill=%22%23E8A33D%22>膳</text></svg>" />
 <style>
   html, body { margin: 0; padding: 0; background: #FFFBF6; }
   * { box-sizing: border-box; }
   /* ログイン・設定画面用スタイル */
-  .auth-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; text-align: center; font-family: sans-serif; }
+  .auth-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; text-align: center; font-family: sans-serif; background: #FFFBF6; }
   .auth-btn { padding: 12px 24px; border-radius: 10px; border: none; cursor: pointer; font-weight: bold; font-size: 16px; margin: 10px 0; width: 100%; max-width: 300px; transition: opacity 0.2s; }
   .auth-btn-primary { background: #FF7A1A; color: white; }
   .auth-btn-outline { background: transparent; border: 2px solid #FF7A1A; color: #FF7A1A; }
   .auth-input { width: 100%; max-width: 300px; padding: 12px; border: 1px solid #F0DFCB; border-radius: 8px; margin-bottom: 10px; font-size: 16px; outline: none; }
 </style>
-
+<script>
+  window.__pendingErrors = [];
+  function __showError(msg) {
+    if (!document.body) {
+      window.__pendingErrors.push(msg);
+      return;
+    }
+    var el = document.getElementById("__error_banner__");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "__error_banner__";
+      el.style.cssText =
+        "position:fixed;top:0;left:0;right:0;background:#D1553B;color:#fff;padding:10px 14px;" +
+        "font-size:12px;font-family:monospace;z-index:99999;white-space:pre-wrap;line-height:1.5;";
+      document.body.appendChild(el);
+    }
+    el.textContent += msg + "\n";
+  }
+  window.addEventListener(
+    "unhandledrejection",
+    function (e) {
+      var msg = (e.reason && (e.reason.message || e.reason.code)) || String(e.reason);
+      __showError("エラー(Promise): " + msg);
+    }
+  );
+  window.addEventListener(
+    "error",
+    function (e) {
+      var msg = e.message || (e.error && e.error.message) || String(e);
+      var src = e.filename ? "\n(" + e.filename + ":" + e.lineno + ")" : "";
+      __showError("エラー: " + msg + src);
+    },
+    true
+  );
+  document.addEventListener("DOMContentLoaded", function () {
+    window.__pendingErrors.forEach(__showError);
+    window.__pendingErrors = [];
+  });
+</script>
 <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin="anonymous"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin="anonymous"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js" crossorigin="anonymous"></script>
@@ -24,7 +62,7 @@
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 </head>
 <body>
-<div id="root"></div>
+<div id="root" style="color:#9C897A;font-family:sans-serif;padding:20px;font-size:14px;">読み込み中…(この文字が消えない場合は上に表示されるエラーメッセージを教えてください)</div>
 
 <script type="text/babel">
 const { useState, useEffect, useMemo, useCallback, useRef } = React;
@@ -40,76 +78,161 @@ const firebaseConfig = {
   appId: "1:411952546498:web:225b8c1de30362a4db315b"
 };
 
+// 初期化
 if (!firebase.apps.length) {
   firebase.initializeApp(firebaseConfig);
 }
 const auth = firebase.auth();
 const db = firebase.database();
 
-// --- 共通アイコンコンポーネント ---
 function Icon({ children, size = 16, color = "currentColor", style, strokeWidth = 2, className }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" style={style} className={className}>
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={color}
+      strokeWidth={strokeWidth}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      style={style}
+      className={className}
+    >
       {children}
     </svg>
   );
 }
-function Plus(p) { return <Icon {...p}><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></Icon>; }
-function X(p) { return <Icon {...p}><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></Icon>; }
-function Check(p) { return <Icon {...p}><polyline points="20 6 9 17 4 12" /></Icon>; }
-function Trash2(p) { return <Icon {...p}><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><line x1="10" y1="11" x2="10" y2="17" /><line x1="14" y1="11" x2="14" y2="17" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /></Icon>; }
-function ShoppingCart(p) { return <Icon {...p}><circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" /><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" /></Icon>; }
-function CalendarDays(p) { return <Icon {...p}><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></Icon>; }
-function BookOpen(p) { return <Icon {...p}><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" /><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" /></Icon>; }
-function ChevronDown(p) { return <Icon {...p}><polyline points="6 9 12 15 18 9" /></Icon>; }
-function Loader2(p) { return <Icon {...p}><path d="M21 12a9 9 0 1 1-6.219-8.56" /></Icon>; }
+function Plus(p) {
+  return <Icon {...p}><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></Icon>;
+}
+function X(p) {
+  return <Icon {...p}><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></Icon>;
+}
+function Check(p) {
+  return <Icon {...p}><polyline points="20 6 9 17 4 12" /></Icon>;
+}
+function Trash2(p) {
+  return <Icon {...p}><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><line x1="10" y1="11" x2="10" y2="17" /><line x1="14" y1="11" x2="14" y2="17" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /></Icon>;
+}
+function ChefHat(p) {
+  return <Icon {...p}><path d="M6 13.87A4 4 0 0 1 7.41 6a5.11 5.11 0 0 1 1.05-1.54 5 5 0 0 1 7.08 0A5.11 5.11 0 0 1 16.59 6 4 4 0 0 1 18 13.87V21H6Z" /><line x1="6" y1="17" x2="18" y2="17" /></Icon>;
+}
+function ShoppingCart(p) {
+  return <Icon {...p}><circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" /><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" /></Icon>;
+}
+function CalendarDays(p) {
+  return <Icon {...p}><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></Icon>;
+}
+function BookOpen(p) {
+  return <Icon {...p}><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" /><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" /></Icon>;
+}
+function ChevronDown(p) {
+  return <Icon {...p}><polyline points="6 9 12 15 18 9" /></Icon>;
+}
+function Loader2(p) {
+  return <Icon {...p}><path d="M21 12a9 9 0 1 1-6.219-8.56" /></Icon>;
+}
 
-// --- 定数・ユーティリティ ---
 const GEMINI_API_KEY = "AQ.Ab8RN6JpiE8VSnbFrBCR43HN9rQ_jeL7yhj2LpvigAM1J5h8EA";
 const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro-preview:generateContent?key=${GEMINI_API_KEY}`;
-const DAYS = ["日", "月", "火", "水", "木", "金", "土"];
-const SLOTS = [{ key: "breakfast", label: "朝" }, { key: "lunch", label: "昼" }, { key: "dinner", label: "晩" }];
-const CATEGORY_ORDER = ["肉類", "魚介類", "野菜", "果物", "卵・乳製品", "豆・大豆製品", "米・麺・パン", "調味料・乾物", "その他"];
-const DISH_CATEGORY_ORDER = ["麺類", "ご飯・丼", "粉物・パン", "汁物・鍋", "卵料理", "魚介料理", "肉料理", "野菜・副菜", "その他"];
-
+const DAYS = ["\u65E5", "\u6708", "\u706B", "\u6C34", "\u6728", "\u91D1", "\u571F"];
+const SLOTS = [
+  { key: "breakfast", label: "\u671D" },
+  { key: "lunch", label: "\u663C" },
+  { key: "dinner", label: "\u6669" }
+];
 const uid = () => Math.random().toString(36).slice(2, 10);
-const toISODate = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-const sundayOf = (date) => { const d = new Date(date); d.setDate(d.getDate() - d.getDay()); d.setHours(0, 0, 0, 0); return d; };
-const addDays = (date, n) => { const d = new Date(date); d.setDate(d.getDate() + n); return d; };
-const formatMonthDay = (d) => `${d.getMonth() + 1}/${d.getDate()}`;
-const safeCheckKey = (name) => String(name).replace(/[.#$/\[\]]/g, "_");
-
+function toISODate(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+function sundayOf(date) {
+  const d = new Date(date);
+  const dow = d.getDay();
+  d.setDate(d.getDate() - dow);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+function addDays(date, n) {
+  const d = new Date(date);
+  d.setDate(d.getDate() + n);
+  return d;
+}
+function formatMonthDay(d) {
+  return `${d.getMonth() + 1}/${d.getDate()}`;
+}
+const CATEGORY_ORDER = ["\u8089\u985E", "\u9B5A\u4ECB\u985E", "\u91CE\u83DC", "\u679C\u7269", "\u5375\u30FB\u4E73\u88FD\u54C1", "\u8C46\u30FB\u5927\u8C46\u88FD\u54C1", "\u7C73\u30FB\u9EBA\u30FB\u30D1\u30F3", "\u8ABF\u5473\u6599\u30FB\u4E7E\u7269", "\u305D\u306E\u4ED6"];
 const CATEGORY_KEYWORDS = {
-  肉類: ["牛肉", "豚肉", "鶏肉", "ひき肉", "挽肉", "ベーコン", "ハム", "ソーセージ", "手羽", "もも肉", "むね肉", "牛", "豚", "鶏", "肉"],
-  魚介類: ["鮭", "さけ", "鯖", "さば", "まぐろ", "マグロ", "いわし", "あじ", "エビ", "えび", "イカ", "いか", "たこ", "タコ", "貝", "しじみ", "あさり", "魚", "刺身", "干物"],
-  野菜: ["じゃがいも", "玉ねぎ", "たまねぎ", "にんじん", "人参", "キャベツ", "白菜", "大根", "ピーマン", "きゅうり", "トマト", "なす", "ねぎ", "ほうれん草", "もやし", "ブロッコリー", "レタス", "しいたけ", "きのこ", "しめじ", "生姜", "にんにく", "ごぼう", "れんこん", "野菜"],
-  果物: ["りんご", "バナナ", "みかん", "いちご", "ぶどう", "レモン", "梨", "桃", "柿", "果物"],
-  "卵・乳製品": ["卵", "たまご", "牛乳", "チーズ", "バター", "ヨーグルト", "生クリーム"],
-  "豆・大豆製品": ["豆腐", "納豆", "油揚げ", "厚揚げ", "大豆", "豆"],
-  "米・麺・パン": ["米", "ご飯", "パン", "うどん", "そば", "パスタ", "麺", "餃子の皮"],
-  "調味料・乾物": ["味噌", "醤油", "しょうゆ", "砂糖", "塩", "酢", "みりん", "酒", "油", "だし", "わかめ", "海苔", "のり", "こんぶ", "昆布", "小麦粉", "片栗粉", "コンソメ", "ソース", "ケチャップ", "マヨネーズ"]
+  \u8089\u985E: ["\u725B\u8089", "\u8C5A\u8089", "\u9D8F\u8089", "\u3072\u304D\u8089", "\u633D\u8089", "\u30D9\u30FC\u30B3\u30F3", "\u30CF\u30E0", "\u30BD\u30FC\u30BB\u30FC\u30B8", "\u624B\u7FBD", "\u3082\u3082\u8089", "\u3080\u306D\u8089", "\u725B", "\u8C5A", "\u9D8F", "\u8089"],
+  \u9B5A\u4ECB\u985E: ["\u9BAD", "\u3055\u3051", "\u9BD6", "\u3055\u3070", "\u307E\u3050\u308D", "\u30DE\u30B0\u30ED", "\u3044\u308F\u3057", "\u3042\u305", "\u30A8\u30D3", "\u3048\u3073", "\u30A4\u30AB", "\u3044\u304b", "\u305F\u3053", "\u30BF\u30B3", "\u8C9D", "\u3057\u3058\u307F", "\u3042\u3055\u308A", "\u9B5A", "\u523A\u8EAB", "\u5E72\u7269"],
+  \u91CE\u83DC: ["\u3058\u3083\u304C\u3044\u3082", "\u7389\u306D\u304E", "\u305F\u307E\u306D\u304E", "\u306B\u3093\u3058\u3093", "\u4EBA\u53C2", "\u30AD\u30E3\u30D9\u30C4", "\u767D\u83DC", "\u5927\u6839", "\u30D4\u30FC\u30DE\u30F3", "\u304D\u3085\u3046\u308A", "\u30C8\u30DE\u30C8", "\u306A\u3059", "\u306D\u304E", "\u307B\u3046\u308C\u3093\u8349", "\u3082\u3084\u3057", "\u30D6\u30ED\u30C3\u30B3\u30EA\u30FC", "\u30EC\u30BF\u30B9", "\u3057\u3044\u305F\u3051", "\u304D\u306E\u3053", "\u3057\u3081\u3058", "\u751F\u59DC", "\u306B\u3093\u306B\u304F", "\u3054\u307C\u3046", "\u308C\u3093\u3053\u3093", "\u91CE\u83DC"],
+  \u679C\u7269: ["\u308A\u3093\u3054", "\u30D0\u30CA\u30CA", "\u307F\u304B\u3093", "\u3044\u3061\u3054", "\u3076\u3069\u3046", "\u30EC\u30E2\u30F3", "\u68A8", "\u6843", "\u67FF", "\u679C\u7269"],
+  "\u5375\u30FB\u4E73\u88FD\u54C1": ["\u5375", "\u305F\u307E\u3054", "\u725B\u4E73", "\u30C1\u30FC\u30BA", "\u30D0\u30BF\u30FC", "\u30E8\u30FC\u30B0\u30EB\u30C8", "\u751F\u30AF\u30EA\u30FC\u30E0"],
+  "\u8C46\u30FB\u5927\u8C46\u88FD\u54C1": ["\u8C46\u8150", "\u7D0D\u8C46", "\u6CB9\u63DA\u3052", "\u539A\u63DA\u3052", "\u5927\u8C46", "\u8C46"],
+  "\u7C73\u30FB\u9EBA\u30FB\u30D1\u30F3": ["\u7C73", "\u3054\u98EF", "\u30D1\u30F3", "\u3046\u3069\u3093", "\u305D\u3070", "\u30D1\u30B9\u30BF", "\u9EBA", "\u9903\u5B50\u306E\u76AE"],
+  "\u8ABF\u5473\u6599\u30FB\u4E7E\u7269": ["\u5473\u564C", "\u91A4\u6CB9", "\u3057\u3087\u3046\u3086", "\u7802\u7CD6", "\u5869", "\u9162", "\u307F\u308A\u3093", "\u9152", "\u6CB9", "\u3060\u3057", "\u308F\u304B\u3081", "\u6D77\u82D4", "\u306E\u308A", "\u3053\u3093\u3076", "\u6606\u5E03", "\u5C0F\u9EA6\u7C89", "\u7247\u6817\u7C89", "\u30B3\u30F3\u30BD\u30E1", "\u30BD\u30FC\u30B9", "\u30B1\u30C1\u30E3\u30C3\u30D7", "\u30DE\u30E8\u30CD\u30FC\u30BA"]
 };
-const DISH_CATEGORY_KEYWORDS = {
-  麺類: ["ラーメン", "うどん", "そば", "パスタ", "麺", "ちゃんぽん", "冷麺", "フォー", "ナポリタン", "カルボナーラ", "ペペロンチーノ", "ジェノベーゼ", "ボンゴレ", "ミートソース", "きしめん"],
-  "ご飯・丼": ["丼", "飯", "ライス", "チャーハン", "雑炊", "おにぎり", "ガパオ", "カレー", "ドリア", "パエリア", "ビビンバ", "リゾット", "寿司", "そばめし"],
-  "粉物・パン": ["パン", "ケーキ", "ピザ", "チヂミ", "お好み焼き", "ガレット", "トースト", "餅", "サンド"],
-  "汁物・鍋": ["汁", "鍋", "スープ", "シチュー", "スンドゥブ", "煮込み", "おでん"],
-  卵料理: ["卵", "たまご", "オムレツ", "巣ごもり"],
-  魚介料理: ["鮭", "さけ", "鯖", "さば", "まぐろ", "エビ", "えび", "イカ", "いか", "たこ", "タコ", "貝", "刺身", "ホタテ", "干物", "魚"],
-  肉料理: ["肉", "鶏", "豚", "牛", "ハンバーグ", "唐揚げ", "餃子", "生姜焼き", "焼き肉", "から揚げ", "つくね", "麻婆", "チキン", "ソーセージ", "ハム", "ベーコン"],
-  "野菜・副菜": ["サラダ", "煮浸し", "煮つけ", "和え", "きんぴら", "ひじき", "漬け", "野菜", "アボカド", "ポテト", "ゴーヤ", "ニラ"]
-};
-
 function categorize(name) {
-  for (const cat of CATEGORY_ORDER) { if (CATEGORY_KEYWORDS[cat]?.some(kw => name.includes(kw))) return cat; }
-  return "その他";
+  for (const cat of CATEGORY_ORDER) {
+    const kws = CATEGORY_KEYWORDS[cat];
+    if (kws && kws.some((kw) => name.includes(kw))) return cat;
+  }
+  return "\u305D\u306E\u4ED6";
 }
+function emptyWeek() {
+  const w = {};
+  DAYS.forEach((d) => {
+    w[d] = { breakfast: null, lunch: null, dinner: null };
+  });
+  return w;
+}
+const DISH_CATEGORY_ORDER = ["\u9EBA\u985E", "\u3054\u98EF\u30FB\u4E3C", "\u7C89\u7269\u30FB\u30D1\u30F3", "\u6C41\u7269\u30FB\u934B", "\u5375\u6599\u7406", "\u9B5A\u4ECB\u6599\u7406", "\u8089\u6599\u7406", "\u91CE\u83DC\u30FB\u526F\u83DC", "\u305D\u306E\u4ED6"];
+const DISH_CATEGORY_KEYWORDS = {
+  \u9EBA\u985E: ["\u30E9\u30FC\u30E1\u30F3", "\u3046\u3069\u3093", "\u305D\u3070", "\u30D1\u30B9\u30BF", "\u9EBA", "\u3061\u3083\u3093\u307D\u3093", "\u51B7\u9EBA", "\u30D5\u30A9\u30FC", "\u30CA\u30DD\u30EA\u30BF\u30F3", "\u30AB\u30EB\u30DC\u30CA\u30FC\u30E9", "\u30DA\u30DA\u30ED\u30F3\u30C1\u30FC\u30CE", "\u30B8\u30A7\u30CE\u30D9\u30FC\u30BC", "\u30DC\u30F3\u30B4\u30EC", "\u30DF\u30FC\u30C8\u30BD\u30FC\u30B9", "\u304D\u3057\u3081\u3093"],
+  "\u3054\u98EF\u30FB\u4E3C": ["\u4E3C", "\u98EF", "\u30E9\u30A4\u30B9", "\u30C1\u30E3\u30FC\u30CF\u30F3", "\u96D1\u708A", "\u304A\u306B\u304E\u308A", "\u30AC\u30D1\u30AA", "\u30AB\u30EC\u30FC", "\u30C9\u30EA\u30A2", "\u30D1\u30A8\u30EA\u30A2", "\u30D3\u30D3\u30F3\u30D0", "\u30EA\u30BE\u30C3\u30C8", "\u5BFF\u53F8", "\u305D\u3070\u3081\u3057"],
+  "\u7C89\u7269\u30FB\u30D1\u30F3": ["\u30D1\u30F3", "\u30B1\u30FC\u30AD", "\u30D4\u30B6", "\u30C1\u30C2\u30DF", "\u304A\u597D\u307F\u713C\u304D", "\u30AC\u30EC\u30C3\u30C8", "\u30C8\u30FE\u30B9\u30C8", "\u9905", "\u30B5\u30F3\u30C9"],
+  "\u6C41\u7269\u30FB\u934B": ["\u6C41", "\u934B", "\u30B9\u30FC\u30D7", "\u30B7\u30C1\u30E5\u30FC", "\u30B9\u30F3\u30C9\u30A5\u30D6", "\u716E\u8FBC\u307F", "\u304A\u3067\u3093"],
+  \u5375\u6599\u7406: ["\u5375", "\u305F\u307E\u3054", "\u30AA\u30E0\u30EC\u30C4", "\u5DE3\u3054\u3082\u308A"],
+  \u9B5A\u4ECB\u6599\u7406: ["\u9BAD", "\u3055\u3051", "\u9BD6", "\u3055\u3070", "\u307E\u3050\u308D", "\u30A8\u30D3", "\u3048\u3073", "\u30A4\u30AB", "\u3044\u304b", "\u305F\u3053", "\u30BF\u30B3", "\u8C9D", "\u523A\u8EAB", "\u30DB\u30BF\u30C6", "\u5E72\u7269", "\u9B5A"],
+  \u8089\u6599\u7406: ["\u8089", "\u9D8F", "\u8C5A", "\u725B", "\u30CF\u30F3\u30D0\u30FC\u30B0", "\u5510\u63DA\u3052", "\u9903\u5B50", "\u751F\u59DC\u713C\u304D", "\u713C\u304D\u8089", "\u304B\u3089\u63DA\u3052", "\u306つ\u304F\u306d", "\u9EBB\u5A46", "\u30C1\u30AD\u30F3", "\u30BD\u30FC\u30BB\u30FC\u30B8", "\u30CF\u30E0", "\u30D9\u30FC\u30B3\u30F3"],
+  "\u91CE\u83DC\u30FB\u526F\u83DC": ["\u30B5\u30E9\u30C0", "\u716E\u6D78\u3057", "\u716E\u3064\u3051", "\u548C\u304er", "\u304き\u3093\u3074\u3089", "\u3072\u3058\u304D", "\u6F2C\u3051", "\u91CE\u83DC", "\u30A2\u30DC\u30AB\u30C9", "\u30DD\u30C6\u30C8", "\u30B4\u30FC\u30E4", "\u30CB\u30E9"]
+};
 function categorizeDish(name) {
-  for (const cat of DISH_CATEGORY_ORDER) { if (DISH_CATEGORY_KEYWORDS[cat]?.some(kw => name.includes(kw))) return cat; }
-  return "その他";
+  for (const cat of DISH_CATEGORY_ORDER) {
+    const kws = DISH_CATEGORY_KEYWORDS[cat];
+    if (kws && kws.some((kw) => name.includes(kw))) return cat;
+  }
+  return "\u305D\u306E\u4ED6";
 }
+function safeCheckKey(name) {
+  return String(name).replace(/[.#$/\[\]]/g, "_");
+}
+const SAMPLE_RECIPES = [
+  {
+    id: uid(),
+    name: "\u8089\u3058\u3083\u304C",
+    ingredients: [
+      { id: uid(), name: "\u3058\u3083\u304C\u3044\u3082", amount: "3\u500B" },
+      { id: uid(), name: "\u725B\u8089\u5207\u308A\u843D\u3068\u3057", amount: "200g" },
+      { id: uid(), name: "\u7389\u306D\u304E", amount: "1\u500B" },
+      { id: uid(), name: "\u306B\u3093\u3058\u3093", amount: "1\u672C" }
+    ]
+  },
+  {
+    id: uid(),
+    name: "\u5473\u564C\u6C41",
+    ingredients: [
+      { id: uid(), name: "\u8C46\u8150", amount: "\u534A\u4E01" },
+      { id: uid(), name: "\u308F\u304B\u3081", amount: "\u5C11\u3005" },
+      { id: uid(), name: "\u5473\u564C", amount: "\u5927\u3055\u30582" }
+    ]
+  }
+];
 
-// --- メインアプリコンポーネント ---
+// --- 認証 & 家族ID管理を行うコントローラーコンポーネント ---
 function App() {
   const [user, setUser] = useState(null);
   const [familyId, setFamilyId] = useState(null);
@@ -120,7 +243,9 @@ function App() {
       if (u) {
         setUser(u);
         const snap = await db.ref(`users/${u.uid}/familyId`).get();
-        if (snap.exists()) setFamilyId(snap.val());
+        if (snap.exists()) {
+          setFamilyId(snap.val());
+        }
       } else {
         setUser(null);
         setFamilyId(null);
@@ -129,10 +254,15 @@ function App() {
     });
   }, []);
 
-  const login = () => auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()).catch(() => auth.signInWithRedirect(new firebase.auth.GoogleAuthProvider()));
-  const logout = () => auth.signOut();
+  const login = () => {
+    const provider = new firebase.auth.GoogleAuthProvider();
+    auth.signInWithPopup(provider).catch(() => {
+      auth.signInWithRedirect(provider);
+    });
+  };
+
   const createFamily = async () => {
-    // 紛らわしい文字(0, O, 1, I, L)を除外した確実なID作成
+    // 0, O, 1, I, L など見分けがつきにくい文字を除外した文字種
     const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
     let newId = "";
     for (let i = 0; i < 6; i++) {
@@ -141,14 +271,14 @@ function App() {
     await db.ref(`users/${user.uid}/familyId`).set(newId);
     setFamilyId(newId);
   };
+
   const joinFamily = async (id) => {
     if (!id) return;
     const cleanId = id.trim().toUpperCase();
     await db.ref(`users/${user.uid}/familyId`).set(cleanId);
     setFamilyId(cleanId);
   };
-  
-  // 家族IDの解除処理
+
   const resetFamilyId = async () => {
     if (!user) return;
     if (confirm("本当にこの家族グループを抜けますか？\n（献立データは削除されませんが、招待コードを入力し直す画面に戻ります）")) {
@@ -157,40 +287,69 @@ function App() {
     }
   };
 
-  if (loading) return <div className="auth-screen">読み込み中...</div>;
-  if (!user) return (
-    <div className="auth-screen">
-      <h1 style={{color: '#FF7A1A'}}>家族のこんだて</h1>
-      <p style={{color: '#9C897A', marginBottom: '30px'}}>家族共有のためにログインしてください</p>
-      <button className="auth-btn auth-btn-primary" onClick={login}>Googleでログイン</button>
-    </div>
-  );
-  if (!familyId) return (
-    <div className="auth-screen">
-      <h2>家族グループ設定</h2>
-      <button className="auth-btn auth-btn-primary" onClick={createFamily}>新しく家族グループを作る</button>
-      <div style={{margin:'20px 0', color:'#9C897A'}}>または</div>
-      <p>招待コードを入力：</p>
-      <input className="auth-input" id="join-input" placeholder="例: AB123XYZ" />
-      <button className="auth-btn auth-btn-outline" onClick={() => joinFamily(document.getElementById('join-input').value)}>参加する</button>
-      <button onClick={logout} style={{marginTop:'40px', background:'none', border:'none', color:'#9C897A', textDecoration:'underline'}}>ログアウト</button>
-    </div>
-  );
+  if (loading) {
+    return (
+      <div style={{ ...styles.app, alignItems: "center", justifyContent: "center", display: "flex", height: "100vh" }}>
+        <Loader2 className="spin" size={28} color={C.mustard} />
+        <style>{`.spin{animation:spin 1s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+      </div>
+    );
+  }
 
-  return <MealPlanner familyId={familyId} onLogout={logout} onResetFamily={resetFamilyId} />;
+  if (!user) {
+    return (
+      <div className="auth-screen">
+        <h1 style={{ color: '#FF7A1A', marginBottom: '10px' }}>家族のこんだて</h1>
+        <p style={{ fontSize: '14px', color: '#9C897A', marginBottom: '30px' }}>家族共有のためにログインしてください</p>
+        <button className="auth-btn auth-btn-primary" onClick={login}>Googleでログイン</button>
+      </div>
+    );
+  }
+
+  if (!familyId) {
+    return <FamilySetup onCreate={createFamily} onJoin={joinFamily} onLogout={() => auth.signOut()} />;
+  }
+
+  return (
+    <MealPlanner
+      familyId={familyId}
+      user={user}
+      onLogout={() => auth.signOut()}
+      onResetFamily={resetFamilyId}
+    />
+  );
 }
 
-// --- 献立プランナー メインコンテンツ ---
-const C = { bg: "#FFFBF6", panel: "#FFFFFF", panel2: "#FFE9D6", line: "#F0DFCB", mustard: "#FF7A1A", tomato: "#E1432B", cream: "#2B231D", muted: "#9C897A" };
-const styles = {
-  app: { minHeight: "100vh", background: C.bg, backgroundImage: "radial-gradient(ellipse at top left, rgba(255,122,26,0.06), transparent 60%)", fontFamily: "'Inter', sans-serif", color: C.cream, paddingBottom: 40 },
-  body: { padding: "14px 16px 90px", maxWidth: 720, margin: "0 auto" }
-};
+// --- 家族設定（オンボーディング）画面 ---
+function FamilySetup({ onCreate, onJoin, onLogout }) {
+  const [input, setInput] = useState("");
+  return (
+    <div className="auth-screen">
+      <h2 style={{ fontSize: '20px', color: C.cream, marginBottom: '20px' }}>家族グループ設定</h2>
+      <button className="auth-btn auth-btn-primary" onClick={onCreate}>新しく家族グループを作る</button>
+      <div style={{ margin: '20px 0', color: '#9C897A', fontSize: '14px' }}>または</div>
+      <p style={{ fontSize: '14px', marginBottom: '10px' }}>招待コードを入力して参加する：</p>
+      <input 
+        className="auth-input" 
+        placeholder="例: AB123XYZ" 
+        value={input} 
+        onChange={e => setInput(e.target.value)}
+      />
+      <button className="auth-btn auth-btn-outline" onClick={() => onJoin(input)}>グループに参加</button>
+      <button onClick={onLogout} style={{ marginTop: '40px', background: 'none', border: 'none', color: '#9C897A', textDecoration: 'underline', cursor: 'pointer' }}>ログアウト</button>
+    </div>
+  );
+}
 
-function MealPlanner({ familyId, onLogout, onResetFamily }) {
+// --- メイン献立プランナー画面 ---
+function MealPlanner({ familyId, user, onLogout, onResetFamily }) {
   const [tab, setTab] = useState("plan");
   const [recipes, setRecipes] = useState([]);
   const [planByWeek, setPlanByWeek] = useState({});
+  const todayWeekStart = useMemo(() => sundayOf(new Date()), []);
+  const weekStart = todayWeekStart;
+  const weekKey = useMemo(() => toISODate(weekStart), [weekStart]);
+  const week = planByWeek[weekKey] || emptyWeek();
   const [extraItems, setExtraItems] = useState([]);
   const [checked, setChecked] = useState({});
   const [loaded, setLoaded] = useState(false);
@@ -203,47 +362,68 @@ function MealPlanner({ familyId, onLogout, onResetFamily }) {
   const [newExtra, setNewExtra] = useState("");
   const skipNextSave = useRef(false);
 
-  const todayWeekStart = useMemo(() => sundayOf(new Date()), []);
-  const weekKey = toISODate(todayWeekStart);
-  const week = planByWeek[weekKey] || { "日":{},"月":{},"火":{},"水":{},"木":{},"金":{},"土":{} };
-
-  // データ同期設定 (家族ごとのパスを使用)
   useEffect(() => {
     const dbRef = db.ref(`families/${familyId}/mealplan`);
-    const listener = dbRef.on("value", (snap) => {
-      const data = snap.val() || {};
-      skipNextSave.current = true;
-      setRecipes(data.recipes || []);
-      setPlanByWeek(data.planByWeek || {});
-      setExtraItems(data.extraItems || []);
-      setChecked(data.checked || {});
-      setLoaded(true);
-    });
+    const listener = dbRef.on(
+      "value",
+      (snap) => {
+        var _a;
+        const data = snap.val() || {};
+        skipNextSave.current = true;
+        setRecipes(
+          ((_a = data.recipes) == null ? void 0 : _a.length)
+            ? data.recipes.map((r) => ({ ...r, ingredients: r.ingredients || [] }))
+            : SAMPLE_RECIPES
+        );
+        if (data.planByWeek) {
+          setPlanByWeek(data.planByWeek);
+        } else if (data.week) {
+          setPlanByWeek({ [toISODate(sundayOf(new Date()))]: data.week });
+        }
+        setExtraItems(data.extraItems || []);
+        setChecked(data.checked || {});
+        setLoaded(true);
+      },
+      (err) => {
+        console.error("load failed", err);
+        setRecipes(SAMPLE_RECIPES);
+        setLoaded(true);
+      }
+    );
     return () => dbRef.off("value", listener);
   }, [familyId]);
 
-  // 保存処理
   useEffect(() => {
-    if (!loaded || skipNextSave.current) { skipNextSave.current = false; return; }
+    if (!loaded) return;
+    if (skipNextSave.current) {
+      skipNextSave.current = false;
+      return;
+    }
     setSaving(true);
     const t = setTimeout(() => {
       db.ref(`families/${familyId}/mealplan`).set({ recipes, planByWeek, extraItems, checked })
+        .catch((e) => console.error("save failed", e))
         .finally(() => setSaving(false));
     }, 800);
     return () => clearTimeout(t);
-  }, [recipes, planByWeek, extraItems, checked, loaded]);
+  }, [recipes, planByWeek, extraItems, checked, loaded, familyId]);
 
   const recipeMap = useMemo(() => {
-    const m = {}; recipes.forEach(r => m[r.id] = r); return m;
+    const m = {};
+    recipes.forEach((r) => m[r.id] = r);
+    return m;
   }, [recipes]);
 
   const shoppingList = useMemo(() => {
     const agg = {};
-    DAYS.forEach(d => {
-      SLOTS.forEach(s => {
-        const rid = planByWeek[weekKey]?.[d]?.[s.key];
-        if (!rid || !recipeMap[rid]) return;
-        (recipeMap[rid].ingredients || []).forEach(ing => {
+    DAYS.forEach((d) => {
+      SLOTS.forEach((s) => {
+        var _a;
+        const rid = (_a = week[d]) == null ? void 0 : _a[s.key];
+        if (!rid) return;
+        const r = recipeMap[rid];
+        if (!r) return;
+        (r.ingredients || []).forEach((ing) => {
           const key = ing.name.trim();
           if (!agg[key]) agg[key] = [];
           if (ing.amount) agg[key].push(ing.amount);
@@ -251,83 +431,347 @@ function MealPlanner({ familyId, onLogout, onResetFamily }) {
       });
     });
     return Object.entries(agg).map(([name, amounts]) => ({ name, amounts, category: categorize(name) }));
-  }, [planByWeek, weekKey, recipeMap]);
+  }, [week, recipeMap]);
 
-  // ハンドラー類
-  const assignSlot = (wk, day, slotKey, recipeId) => {
-    setPlanByWeek(prev => {
-      const w = prev[wk] || { "日":{},"月":{},"火":{},"水":{},"木":{},"金":{},"土":{} };
-      return { ...prev, [wk]: { ...w, [day]: { ...w[day], [slotKey]: recipeId } } };
+  function assignSlot(wk, day, slotKey, recipeId) {
+    setPlanByWeek((pbw) => {
+      const w = pbw[wk] || emptyWeek();
+      return { ...pbw, [wk]: { ...w, [day]: { ...w[day], [slotKey]: recipeId } } };
     });
     setPickerFor(null);
-  };
-  const clearSlot = (wk, day, slotKey) => {
-    setPlanByWeek(prev => {
-      const w = prev[wk] || {};
-      return { ...prev, [wk]: { ...w, [day]: { ...w[day], [slotKey]: null } } };
+  }
+
+  function clearSlot(wk, day, slotKey) {
+    setPlanByWeek((pbw) => {
+      const w = pbw[wk] || emptyWeek();
+      return { ...pbw, [wk]: { ...w, [day]: { ...w[day], [slotKey]: null } } };
     });
-  };
-  const saveRecipe = (form) => {
-    const cleanIngs = form.ingredients.filter(i => i.name.trim());
+  }
+
+  function bulkImportRecipes(text) {
+    const names = text.split(/[\n,、]/).map((s) => s.trim()).filter(Boolean);
+    const existing = new Set(recipes.map((r) => r.name));
+    const toAdd = [];
+    names.forEach((name) => {
+      if (!existing.has(name)) {
+        existing.add(name);
+        toAdd.push({ id: uid(), name, ingredients: [] });
+      }
+    });
+    if (toAdd.length) setRecipes((rs) => [...rs, ...toAdd]);
+    setImportOpen(false);
+  }
+
+  function mergePhotoRecipes(extracted) {
+    const existing = new Set(recipes.map((r) => r.name));
+    const toAdd = [];
+    extracted.forEach((r) => {
+      const name = (r.name || "").trim();
+      if (!name || existing.has(name)) return;
+      existing.add(name);
+      const ingredients = Array.isArray(r.ingredients)
+        ? r.ingredients
+            .map((i) => ({ id: uid(), name: (i.name || "").trim(), amount: (i.amount || "").trim() }))
+            .filter((i) => i.name)
+        : [];
+      toAdd.push({ id: uid(), name, ingredients });
+    });
+    if (toAdd.length) setRecipes((rs) => [...rs, ...toAdd]);
+    return toAdd.length;
+  }
+
+  function saveRecipe(form) {
+    if (!form.name.trim()) return;
+    const cleanIngredients = form.ingredients.filter((i) => i.name.trim());
     if (form.id) {
-      setRecipes(rs => rs.map(r => r.id === form.id ? { ...form, ingredients: cleanIngs } : r));
+      setRecipes((rs) => rs.map((r) => r.id === form.id ? { ...form, ingredients: cleanIngredients } : r));
     } else {
-      setRecipes(rs => [...rs, { ...form, id: uid(), ingredients: cleanIngs }]);
+      setRecipes((rs) => [...rs, { id: uid(), name: form.name.trim(), ingredients: cleanIngredients, category: form.category || null }]);
     }
     setRecipeForm(null);
-  };
-  const toggleCheck = (key) => setChecked(c => ({ ...c, [key]: !c[key] ? Date.now() : null }));
-  const addExtra = () => { if (!newExtra.trim()) return; setExtraItems(rs => [...rs, { id: uid(), text: newExtra.trim(), category: categorize(newExtra) }]); setNewExtra(""); };
-  const removeExtra = (id) => setExtraItems(rs => rs.filter(i => i.id !== id));
+  }
 
-  if (!loaded) return <div className="auth-screen">データを同期中...</div>;
+  function deleteRecipe(id) {
+    setRecipes((rs) => rs.filter((r) => r.id !== id));
+    setPlanByWeek((pbw) => {
+      const next = {};
+      Object.entries(pbw).forEach(([wk, w]) => {
+        const nw = { ...w };
+        DAYS.forEach((d) => {
+          SLOTS.forEach((s) => {
+            var _a;
+            if (((_a = nw[d]) == null ? void 0 : _a[s.key]) === id) nw[d] = { ...nw[d], [s.key]: null };
+          });
+        });
+        next[wk] = nw;
+      });
+      return next;
+    });
+  }
+
+  function toggleCheck(key) {
+    setChecked((c) => {
+      const next = { ...c };
+      if (next[key]) {
+        delete next[key];
+      } else {
+        next[key] = Date.now();
+      }
+      return next;
+    });
+  }
+
+  function addExtra() {
+    if (!newExtra.trim()) return;
+    const text = newExtra.trim();
+    setExtraItems((items) => [...items, { id: uid(), text, category: categorize(text) }]);
+    setNewExtra("");
+  }
+
+  function removeExtra(id) {
+    setExtraItems((items) => items.filter((i) => i.id !== id));
+  }
+
+  useEffect(() => {
+    if (!loaded) return;
+    const ONE_DAY = 24 * 60 * 60 * 1e3;
+    function cleanup() {
+      const now = Date.now();
+      setChecked((c) => {
+        let changed = false;
+        const next = { ...c };
+        Object.keys(next).forEach((k) => {
+          if (typeof next[k] === "number" && now - next[k] > ONE_DAY) {
+            delete next[k];
+            changed = true;
+          }
+        });
+        return changed ? next : c;
+      });
+      setExtraItems((items) =>
+        items.filter((item) => {
+          const ts = checked[safeCheckKey(item.text.trim())];
+          return !(typeof ts === "number" && now - ts > ONE_DAY);
+        })
+      );
+    }
+    cleanup();
+    const timer = setInterval(cleanup, 60 * 60 * 1e3);
+    return () => clearInterval(timer);
+  }, [loaded, checked]);
+
+  if (!loaded) {
+    return (
+      <div style={{ ...styles.app, alignItems: "center", justifyContent: "center", display: "flex" }}>
+        <Loader2 className="spin" size={28} color={C.mustard} />
+        <style>{`.spin{animation:spin 1s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+      </div>
+    );
+  }
 
   return (
     <div style={styles.app}>
-      <header style={{position:'sticky', top:0, zIndex:20, background:'rgba(255,251,246,0.92)', backdropFilter:'blur(6px)', borderBottom:`1px solid ${C.line}`, padding:'8px 16px', display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-        <div style={{fontSize:'12px', color:C.muted}}>
-          家族ID: <strong style={{color: C.mustard}}>{familyId}</strong>
-          <button onClick={onResetFamily} style={{marginLeft:'8px', padding:'2px 6px', fontSize:'10px', color:C.muted, background:'none', border:`1px solid ${C.line}`, borderRadius:'4px', cursor:'pointer'}}>変更</button>
-        </div>
-        <div style={{display:'flex', alignItems:'center', gap:'12px'}}>
-           <span style={{fontSize:10, color:C.muted}}>{saving ? "保存中..." : "保存済み"}</span>
-           <button onClick={onLogout} style={{fontSize:10, color:C.muted, background:'none', border:'none', textDecoration:'underline'}}>ログアウト</button>
-        </div>
-      </header>
-      
-      <main style={styles.body}>
-        {tab === "plan" && <PlanView planByWeek={planByWeek} todayWeekStart={todayWeekStart} recipeMap={recipeMap} onPick={setPickerFor} onClear={clearSlot} />}
-        {tab === "shopping" && <ShoppingView list={shoppingList} extraItems={extraItems} checked={checked} onToggle={toggleCheck} newExtra={newExtra} setNewExtra={setNewExtra} onAddExtra={addExtra} onRemoveExtra={removeExtra} />}
-        {tab === "recipes" && <RecipesView recipes={recipes} onEdit={setRecipeForm} onNew={() => setRecipeForm({ name:"", ingredients:[{id:uid(),name:"",amount:""}] })} onPhotoImport={() => setPhotoImportOpen(true)} onUrlImport={() => setUrlImportOpen(true)} onImport={() => setImportOpen(true)} />}
-      </main>
-
-      {/* モーダル類 */}
-      {pickerFor && <RecipePickerModal recipes={recipes} onPick={rid => assignSlot(pickerFor.wk, pickerFor.day, pickerFor.slot, rid)} onClose={() => setPickerFor(null)} />}
-      {recipeForm && <RecipeFormModal form={recipeForm} onChange={setRecipeForm} onSave={saveRecipe} onClose={() => setRecipeForm(null)} onDelete={recipeForm.id ? () => { setRecipes(rs => rs.filter(r => r.id !== recipeForm.id)); setRecipeForm(null); } : null} />}
-      {importOpen && <ImportModal onImport={text => { 
-          const names = text.split(/[\n,、]/).map(s => s.trim()).filter(Boolean);
-          setRecipes(rs => [...rs, ...names.map(n => ({ id:uid(), name:n, ingredients:[] }))]);
-          setImportOpen(false);
-      }} onClose={() => setImportOpen(false)} />}
-      {photoImportOpen && <PhotoImportModal onMerge={added => { setRecipes(rs => [...rs, ...added]); return added.length; }} onClose={() => setPhotoImportOpen(false)} />}
-      {urlImportOpen && <UrlImportModal onMerge={added => { setRecipes(rs => [...rs, ...added]); return added.length; }} onClose={() => setUrlImportOpen(false)} />}
-
+      <link rel="preconnect" href="https://fonts.googleapis.com" />
+      <style>{FONT_IMPORT}</style>
+      <Header familyId={familyId} saving={saving} onLogout={onLogout} onResetFamily={onResetFamily} />
+      <div style={styles.body}>
+        {tab === "plan" && (
+          <PlanView
+            planByWeek={planByWeek}
+            todayWeekStart={todayWeekStart}
+            recipeMap={recipeMap}
+            onPick={(wk, day, slot) => setPickerFor({ wk, day, slot })}
+            onClear={clearSlot}
+          />
+        )}
+        {tab === "recipes" && (
+          <RecipesView
+            recipes={recipes}
+            onEdit={(r) => setRecipeForm({ category: null, ...r })}
+            onNew={() => setRecipeForm({ id: null, name: "", category: null, ingredients: [{ id: uid(), name: "", amount: "" }] })}
+            onImport={() => setImportOpen(true)}
+            onPhotoImport={() => setPhotoImportOpen(true)}
+            onUrlImport={() => setUrlImportOpen(true)}
+          />
+        )}
+        {tab === "shopping" && (
+          <ShoppingView
+            list={shoppingList}
+            extraItems={extraItems}
+            checked={checked}
+            onToggle={toggleCheck}
+            newExtra={newExtra}
+            setNewExtra={setNewExtra}
+            onAddExtra={addExtra}
+            onRemoveExtra={removeExtra}
+          />
+        )}
+      </div>
+      {pickerFor && (
+        <RecipePickerModal
+          recipes={recipes}
+          onPick={(rid) => assignSlot(pickerFor.wk, pickerFor.day, pickerFor.slot, rid)}
+          onClose={() => setPickerFor(null)}
+        />
+      )}
+      {recipeForm && (
+        <RecipeFormModal
+          form={recipeForm}
+          onChange={setRecipeForm}
+          onSave={saveRecipe}
+          onClose={() => setRecipeForm(null)}
+          onDelete={recipeForm.id ? () => {
+            deleteRecipe(recipeForm.id);
+            setRecipeForm(null);
+          } : null}
+        />
+      )}
+      {importOpen && <ImportModal onImport={bulkImportRecipes} onClose={() => setImportOpen(false)} />}
+      {photoImportOpen && <PhotoImportModal onMerge={mergePhotoRecipes} onClose={() => setPhotoImportOpen(false)} />}
+      {urlImportOpen && <UrlImportModal onMerge={mergePhotoRecipes} onClose={() => setUrlImportOpen(false)} />}
       <BottomNav tab={tab} setTab={setTab} />
     </div>
   );
 }
 
-// --- 下部ナビゲーション ---
-function BottomNav({ tab, setTab }) {
-  const tabs = [{ key: "plan", label: "献立表", icon: CalendarDays }, { key: "shopping", label: "買い物", icon: ShoppingCart }, { key: "recipes", label: "レシピ", icon: BookOpen }];
+const C = {
+  bg: "#FFFBF6",
+  panel: "#FFFFFF",
+  panel2: "#FFE9D6",
+  line: "#F0DFCB",
+  mustard: "#FF7A1A",
+  tomato: "#E1432B",
+  cream: "#2B231D",
+  muted: "#9C897A"
+};
+const FONT_IMPORT = `@import url('https://fonts.googleapis.com/css2?family=Kalam:wght@400;700&family=Inter:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap');`;
+const styles = {
+  app: {
+    minHeight: "100vh",
+    background: C.bg,
+    backgroundImage: "radial-gradient(ellipse at top left, rgba(255,122,26,0.06), transparent 60%)",
+    fontFamily: "'Inter', sans-serif",
+    color: C.cream,
+    paddingBottom: 40
+  },
+  body: { padding: "14px 16px 90px", maxWidth: 720, margin: "0 auto" }
+};
+
+// --- ヘッダーコンポーネントの特別仕様 ---
+function Header({ familyId, saving, onLogout, onResetFamily }) {
   return (
-    <div style={{position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 30, background: "rgba(255,255,255,0.97)", backdropFilter: "blur(8px)", borderTop: `1px solid ${C.line}`, boxShadow: "0 -4px 14px rgba(43,35,29,0.06)"}}>
-      <div style={{maxWidth: 720, margin: "0 auto", display: "flex", padding: "6px 8px", paddingBottom: "calc(6px + env(safe-area-inset-bottom))"}}>
-        {tabs.map(t => {
-          const IconComp = t.icon; const active = tab === t.key;
+    <div style={{
+      position: "sticky",
+      top: 0,
+      zIndex: 20,
+      background: "rgba(255,251,246,0.92)",
+      backdropFilter: "blur(6px)",
+      borderBottom: `1px solid ${C.line}`
+    }}>
+      <div style={{
+        maxWidth: 720,
+        margin: "0 auto",
+        padding: "8px 16px",
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center"
+      }}>
+        <div style={{ fontSize: 12, color: C.muted, display: "flex", alignItems: "center", gap: "6px" }}>
+          <span>家族ID: <strong style={{ color: C.mustard }}>{familyId}</strong></span>
+          <button 
+            onClick={onResetFamily} 
+            style={{
+              padding: "2px 6px", 
+              fontSize: "10px", 
+              color: C.muted, 
+              background: "none", 
+              border: `1px solid ${C.line}`, 
+              borderRadius: "4px", 
+              cursor: "pointer"
+            }}
+          >
+            変更
+          </button>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          <span style={{ fontSize: 11, color: C.muted }}>
+            {saving ? "保存中..." : "保存済み"}
+          </span>
+          <button 
+            onClick={onLogout} 
+            style={{
+              fontSize: 11, 
+              color: C.muted, 
+              background: "none", 
+              border: "none", 
+              textDecoration: "underline", 
+              cursor: "pointer",
+              padding: 0
+            }}
+          >
+            ログアウト
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BottomNav({ tab, setTab }) {
+  const tabs = [
+    { key: "plan", label: "献立表", icon: CalendarDays },
+    { key: "shopping", label: "買い物リスト", icon: ShoppingCart },
+    { key: "recipes", label: "レシピ帳", icon: BookOpen }
+  ];
+  return (
+    <div
+      style={{
+        position: "fixed",
+        left: 0,
+        right: 0,
+        bottom: 0,
+        zIndex: 30,
+        background: "rgba(255,255,255,0.97)",
+        backdropFilter: "blur(8px)",
+        borderTop: `1px solid ${C.line}`,
+        boxShadow: "0 -4px 14px rgba(43,35,29,0.06)"
+      }}
+    >
+      <div
+        style={{
+          maxWidth: 720,
+          margin: "0 auto",
+          display: "flex",
+          padding: "6px 8px",
+          paddingBottom: "calc(6px + env(safe-area-inset-bottom))"
+        }}
+      >
+        {tabs.map((t) => {
+          const IconComp = t.icon;
+          const active = tab === t.key;
           return (
-            <button key={t.key} onClick={() => setTab(t.key)} style={{flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3, padding: "8px 4px 6px", borderRadius: 12, border: "none", background: active ? "rgba(255,122,26,0.12)" : "transparent", color: active ? C.mustard : C.muted, fontSize: 11, fontWeight: active ? 700 : 600, cursor: "pointer"}}>
-              <IconComp size={19} strokeWidth={active ? 2.4 : 2} />{t.label}
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              style={{
+                flex: 1,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 3,
+                padding: "8px 4px 6px",
+                borderRadius: 12,
+                border: "none",
+                background: active ? "rgba(255,122,26,0.12)" : "transparent",
+                color: active ? C.mustard : C.muted,
+                fontSize: 11,
+                fontWeight: active ? 700 : 600,
+                cursor: "pointer"
+              }}
+            >
+              <IconComp size={19} strokeWidth={active ? 2.4 : 2} />
+              {t.label}
             </button>
           );
         })}
@@ -336,42 +780,208 @@ function BottomNav({ tab, setTab }) {
   );
 }
 
-// --- プランビュー ---
 function PlanView({ planByWeek, todayWeekStart, recipeMap, onPick, onClear }) {
+  const [weeksCount, setWeeksCount] = useState(4);
+  const sentinelRef = useRef(null);
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const obs = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) setWeeksCount((c) => c + 4);
+      },
+      { rootMargin: "800px 0px" }
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+  const weekStarts = useMemo(
+    () => Array.from({ length: weeksCount }, (_, wi) => addDays(todayWeekStart, wi * 7)),
+    [weeksCount, todayWeekStart]
+  );
   return (
-    <div style={{display:'flex', flexDirection:'column', gap:4}}>
-      {[0, 1, 2, 3].map(wi => {
-        const ws = addDays(todayWeekStart, wi * 7);
-        return <WeekBlock key={wi} weekStart={ws} isFirst={wi===0} plan={planByWeek[toISODate(ws)] || {}} recipeMap={recipeMap} onPick={onPick} onClear={onClear} />;
-      })}
+    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+      {weekStarts.map((weekStart, wi) => (
+        <WeekBlock
+          key={toISODate(weekStart)}
+          weekStart={weekStart}
+          isFirst={wi === 0}
+          plan={planByWeek[toISODate(weekStart)] || emptyWeek()}
+          recipeMap={recipeMap}
+          onPick={onPick}
+          onClear={onClear}
+        />
+      ))}
+      <div ref={sentinelRef} style={{ height: 1 }} />
+      <div style={{ textAlign: "center", color: C.muted, fontSize: 12, padding: "8px 0 20px" }}>
+        下にスクロールすると続きの週が表示されます
+      </div>
     </div>
   );
 }
+
 function WeekBlock({ weekStart, isFirst, plan, recipeMap, onPick, onClear }) {
   const wk = toISODate(weekStart);
   const todayISO = toISODate(new Date());
+  const weekEnd = addDays(weekStart, 6);
+  const rangeLabel = `${weekStart.getFullYear()}年 ${formatMonthDay(weekStart)} 〜 ${formatMonthDay(weekEnd)}`;
   return (
-    <div style={{marginBottom: 16}}>
-      <div style={{fontSize: 12, color: isFirst ? C.mustard : C.muted, padding: "10px 2px 8px"}}>
-        {isFirst && "今週 ・ "}{weekStart.getFullYear()}年 {formatMonthDay(weekStart)} 〜 {formatMonthDay(addDays(weekStart, 6))}
+    <div>
+      <div
+        style={{
+          fontFamily: "'Space Mono', monospace",
+          fontSize: 12,
+          color: isFirst ? C.mustard : C.muted,
+          padding: "10px 2px 8px"
+        }}
+      >
+        {isFirst ? "今週 ・ " : ""}
+        {rangeLabel}
       </div>
-      <div style={{background: C.panel, border: `1px solid ${C.line}`, borderRadius: 12, overflow: "hidden"}}>
-        <div style={{display: "flex", borderBottom: `1px solid ${C.line}`, background: "#FFF1E2"}}>
-          <div style={{width: 34}} />
-          {SLOTS.map(s => <div key={s.key} style={{flex: 1, textAlign: "center", fontSize: 10.5, fontWeight: 700, color: "#B8631A", padding: "6px 2px"}}>{s.label}</div>)}
+      <div
+        style={{
+          background: C.panel,
+          border: `1px solid ${C.line}`,
+          borderRadius: 12,
+          overflow: "hidden"
+        }}
+      >
+        <div style={{ display: "flex", borderBottom: `1px solid ${C.line}`, background: "#FFF1E2" }}>
+          <div style={{ width: 34, flexShrink: 0 }} />
+          {SLOTS.map((slot) => (
+            <div
+              key={slot.key}
+              style={{
+                flex: 1,
+                textAlign: "center",
+                fontSize: 10.5,
+                fontWeight: 700,
+                color: "#B8631A",
+                padding: "6px 2px",
+                fontFamily: "'Space Mono', monospace"
+              }}
+            >
+              {slot.label}
+            </div>
+          ))}
         </div>
         {DAYS.map((day, i) => {
-          const dDate = addDays(weekStart, i); const isToday = toISODate(dDate) === todayISO;
+          const dateForDay = addDays(weekStart, i);
+          const isToday = toISODate(dateForDay) === todayISO;
+          const isWeekend = i === 0 || i === 6;
           return (
-            <div key={day} style={{display: "flex", borderBottom: i < 6 ? `1px solid ${C.line}` : "none", background: isToday ? "rgba(255,166,48,0.1)" : "transparent"}}>
-              <div style={{width: 34, textAlign: "center", padding: "8px 0", borderRight: `1px solid ${C.line}`, fontSize: 14, color: (i===0||i===6)?C.tomato:C.cream}}>
-                <div>{day}</div><div style={{fontSize:9, opacity:0.6}}>{dDate.getDate()}</div>
+            <div
+              key={day}
+              style={{
+                display: "flex",
+                borderBottom: i < 6 ? `1px solid ${C.line}` : "none",
+                borderLeft: isToday ? `3px solid ${C.mustard}` : "3px solid transparent",
+                background: isToday ? "linear-gradient(90deg, rgba(255,166,48,0.16), rgba(255,90,26,0.05) 60%)" : "transparent"
+              }}
+            >
+              <div
+                style={{
+                  width: 34,
+                  flexShrink: 0,
+                  position: "relative",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 1,
+                  borderRight: `1px solid ${C.line}`,
+                  padding: "6px 2px"
+                }}
+              >
+                {isToday && (
+                  <span
+                    style={{
+                      position: "absolute",
+                      top: 3,
+                      right: 3,
+                      width: 6,
+                      height: 6,
+                      borderRadius: "50%",
+                      background: "linear-gradient(135deg, #FFC24B, #FF5A1A)"
+                    }}
+                  />
+                )}
+                <span
+                  style={{
+                    fontFamily: "'Kalam', cursive",
+                    fontSize: 14,
+                    color: isWeekend ? C.tomato : C.cream,
+                    lineHeight: 1
+                  }}
+                >
+                  {day}
+                </span>
+                <span
+                  style={{
+                    fontFamily: "'Space Mono', monospace",
+                    fontSize: 9,
+                    color: isToday ? C.mustard : C.muted
+                  }}
+                >
+                  {dateForDay.getDate()}
+                </span>
               </div>
-              {SLOTS.map(slot => {
-                const rid = plan[day]?.[slot.key]; const recipe = rid ? recipeMap[rid] : null;
+              {SLOTS.map((slot, si) => {
+                const rid = plan[day]?.[slot.key];
+                const recipe = rid ? recipeMap[rid] : null;
                 return (
-                  <button key={slot.key} onClick={() => onPick({wk, day, slot: slot.key})} style={{flex: 1, minHeight: 52, position: "relative", border: "none", borderRight: slot.key!=="dinner" ? `1px solid ${C.line}` : "none", background: "transparent", cursor: "pointer"}}>
-                    {recipe ? <div style={{fontSize: 10.5, padding: "2px 4px"}}>{recipe.name}<span onClick={(e)=>{e.stopPropagation(); onClear(wk, day, slot.key)}} style={{position:'absolute', top:1, right:1}}><X size={9} color={C.muted}/></span></div> : <Plus size={14} color={C.line} style={{margin:'auto'}}/>}
+                  <button
+                    key={slot.key}
+                    onClick={() => onPick(wk, day, slot.key)}
+                    style={{
+                      flex: 1,
+                      minHeight: 52,
+                      position: "relative",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      padding: "4px 4px",
+                      background: "transparent",
+                      border: "none",
+                      borderRight: si < SLOTS.length - 1 ? `1px solid ${C.line}` : "none",
+                      cursor: "pointer"
+                    }}
+                  >
+                    {recipe ? (
+                      <React.Fragment>
+                        <span
+                          style={{
+                            fontSize: 10.5,
+                            color: C.cream,
+                            lineHeight: 1.2,
+                            textAlign: "center",
+                            display: "-webkit-box",
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: "vertical",
+                            overflow: "hidden"
+                          }}
+                        >
+                          {recipe.name}
+                        </span>
+                        <span
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onClear(wk, day, slot.key);
+                          }}
+                          style={{
+                            position: "absolute",
+                            top: 1,
+                            right: 1,
+                            padding: 3,
+                            display: "flex"
+                          }}
+                        >
+                          <X size={9} color={C.muted} />
+                        </span>
+                      </React.Fragment>
+                    ) : (
+                      <Plus size={15} color={C.muted} strokeWidth={2.5} />
+                    )}
                   </button>
                 );
               })}
@@ -383,69 +993,940 @@ function WeekBlock({ weekStart, isFirst, plan, recipeMap, onPick, onClear }) {
   );
 }
 
-// --- 買い物リスト ---
-function ShoppingView({ list, extraItems, checked, onToggle, newExtra, setNewExtra, onAddExtra, onRemoveExtra }) {
-  const all = [...list.map(i => ({...i, key: i.name})), ...extraItems.map(i => ({key: i.text, label: i.text, amounts:[], isExtra:true, id: i.id}))];
-  const sorted = CATEGORY_ORDER.map(cat => ({ category: cat, items: all.filter(i => categorize(i.key) === cat) })).filter(g => g.items.length > 0);
-  
+const iconBtnStyle = {
+  background: "transparent",
+  border: "none",
+  cursor: "pointer",
+  padding: 4,
+  display: "flex"
+};
+
+function RecipePickerModal({ recipes, onPick, onClose }) {
+  const [query, setQuery] = useState("");
+  const groups = useMemo(() => {
+    const q = query.trim();
+    const filtered = q ? recipes.filter((r) => r.name.includes(q)) : recipes;
+    const byCat = {};
+    filtered.forEach((r) => {
+      const cat = r.category || categorizeDish(r.name);
+      (byCat[cat] = byCat[cat] || []).push(r);
+    });
+    return DISH_CATEGORY_ORDER.filter((c) => {
+      var _a;
+      return (_a = byCat[c]) == null ? void 0 : _a.length;
+    }).map((c) => ({ category: c, items: byCat[c] }));
+  }, [recipes, query]);
   return (
-    <div style={{background: C.panel, border: `1px dashed ${C.line}`, borderRadius: 14, padding: "16px"}}>
-      <h2 style={{fontFamily: "'Kalam', cursive", color: C.mustard, margin: "0 0 16px"}}>買い物リスト</h2>
-      {sorted.map(g => (
-        <div key={g.category} style={{marginBottom: 12}}>
-          <div style={{fontSize: 11, fontWeight: 700, color: C.tomato, marginBottom: 4}}>{g.category}</div>
-          {g.items.map(item => {
-            const ck = safeCheckKey(item.key); const isDone = !!checked[ck];
-            return (
-              <div key={item.key} style={{display:'flex', alignItems:'center', gap:10, padding:'6px 0', borderBottom:`1px dotted ${C.line}`, opacity: isDone ? 0.5 : 1}}>
-                <button onClick={() => onToggle(ck)} style={{width: 19, height: 19, borderRadius: 5, border: `1.5px solid ${C.mustard}`, background: isDone ? C.mustard : "transparent", display:'flex', alignItems:'center', justifyContent:'center'}}>
-                  {isDone && <Check size={12} color="#fff" />}
-                </button>
-                <div style={{flex: 1, fontSize: 14, textDecoration: isDone ? "line-through" : "none"}}>{item.label || item.name} <small style={{fontSize:10, color:C.muted}}>{item.amounts?.join("+")}</small></div>
-                {item.isExtra && <button onClick={() => onRemoveExtra(item.id)} style={{border:'none', background:'none'}}><X size={13} color={C.muted}/></button>}
+    <Modal onClose={onClose} title="レシピを選ぶ">
+      {recipes.length === 0 ? (
+        <p style={{ color: C.muted, fontSize: 14 }}>レシピ帳にレシピを登録してください。</p>
+      ) : (
+        <React.Fragment>
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="レシピを検索"
+            style={{ ...inputStyle, marginBottom: 14 }}
+          />
+          {groups.length === 0 ? (
+            <p style={{ color: C.muted, fontSize: 14 }}>一致するレシピがありません。</p>
+          ) : (
+            groups.map((g) => (
+              <div key={g.category} style={{ marginBottom: 14 }}>
+                <div
+                  style={{
+                    fontFamily: "'Kalam', cursive",
+                    fontSize: 14,
+                    color: C.mustard,
+                    marginBottom: 6
+                  }}
+                >
+                  {g.category}
+                  <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, color: C.muted, marginLeft: 6 }}>
+                    {g.items.length}
+                  </span>
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                  {g.items.map((r) => (
+                    <button
+                      key={r.id}
+                      onClick={() => onPick(r.id)}
+                      style={{
+                        background: C.panel2,
+                        border: `1px solid ${C.line}`,
+                        borderRadius: 8,
+                        padding: "6px 10px",
+                        color: C.cream,
+                        fontSize: 13,
+                        cursor: "pointer"
+                      }}
+                    >
+                      {r.name}
+                    </button>
+                  ))}
+                </div>
               </div>
-            );
-          })}
+            ))
+          )}
+        </React.Fragment>
+      )}
+    </Modal>
+  );
+}
+
+function RecipeCategoryGroup({ group, onEdit }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          width: "100%",
+          background: "transparent",
+          border: "none",
+          padding: "6px 2px",
+          cursor: "pointer",
+          textAlign: "left"
+        }}
+      >
+        <ChevronDown
+          size={15}
+          color={C.mustard}
+          style={{ transform: open ? "rotate(0deg)" : "rotate(-90deg)", transition: "transform 0.15s", flexShrink: 0 }}
+        />
+        <span style={{ fontFamily: "'Kalam', cursive", fontSize: 14, color: C.mustard }}>
+          {group.category}
+        </span>
+        <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, color: C.muted }}>
+          {group.items.length}
+        </span>
+      </button>
+      {open && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 5, padding: "2px 2px 4px 21px" }}>
+          {group.items.map((r) => (
+            <button
+              key={r.id}
+              onClick={() => onEdit(r)}
+              style={{
+                background: C.panel,
+                border: `1px solid ${(r.ingredients || []).length ? C.line : "rgba(156,137,122,0.35)"}`,
+                borderRadius: 8,
+                padding: "5px 9px",
+                fontSize: 12.5,
+                color: C.cream,
+                cursor: "pointer",
+                lineHeight: 1.3
+              }}
+            >
+              {r.name}
+            </button>
+          ))}
         </div>
-      ))}
-      <div style={{display:'flex', gap:6, marginTop:16}}>
-        <input className="auth-input" style={{flex:1, marginBottom:0}} value={newExtra} onChange={e => setNewExtra(e.target.value)} placeholder="ほしいものを追加" />
-        <button onClick={onAddExtra} style={{background:C.mustard, border:'none', color:'#fff', padding:'0 15px', borderRadius:8}}><Plus size={20}/></button>
-      </div>
+      )}
     </div>
   );
 }
 
-// --- レシピ帳 ---
-function RecipesView({ recipes, onEdit, onNew, onPhotoImport, onUrlImport, onImport }) {
-  const groups = DISH_CATEGORY_ORDER.map(cat => ({ category: cat, items: recipes.filter(r => (r.category || categorizeDish(r.name)) === cat) })).filter(g => g.items.length > 0);
+function RecipesView({ recipes, onEdit, onNew, onImport, onPhotoImport, onUrlImport }) {
+  const buildGroups = () => {
+    const byCat = {};
+    recipes.forEach((r) => {
+      const cat = r.category || categorizeDish(r.name);
+      (byCat[cat] = byCat[cat] || []).push(r);
+    });
+    return DISH_CATEGORY_ORDER.filter((c) => {
+      var _a;
+      return (_a = byCat[c]) == null ? void 0 : _a.length;
+    }).map((c) => ({
+      category: c,
+      items: byCat[c]
+    }));
+  };
+  const groups = buildGroups();
   return (
     <div>
-      <div style={{display:'flex', gap:6, marginBottom:16}}>
-        <button onClick={onNew} style={{flex:1, background:C.mustard, color:'#fff', border:'none', padding:'10px', borderRadius:10, fontWeight:700, fontSize:12}}>新しいレシピ</button>
-        <button onClick={onPhotoImport} style={{flex:1, background:'none', color:C.tomato, border:`1px solid ${C.tomato}`, padding:'10px', borderRadius:10, fontWeight:700, fontSize:12}}>写真から追加</button>
+      <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
+        <button
+          onClick={onNew}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 4,
+            flex: 1,
+            minWidth: 0,
+            background: C.mustard,
+            color: "#26210F",
+            border: "none",
+            borderRadius: 10,
+            padding: "9px 4px",
+            fontSize: 12.5,
+            fontWeight: 700,
+            cursor: "pointer",
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis"
+          }}
+        >
+          <Plus size={14} />
+          新しいレシピ
+        </button>
+        <button
+          onClick={onPhotoImport}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 4,
+            flex: 1,
+            minWidth: 0,
+            background: "transparent",
+            color: C.tomato,
+            border: `1px solid ${C.tomato}`,
+            borderRadius: 10,
+            padding: "9px 4px",
+            fontSize: 12.5,
+            fontWeight: 700,
+            cursor: "pointer",
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis"
+          }}
+        >
+          写真から追加
+        </button>
+        <button
+          onClick={onUrlImport}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 4,
+            flex: 1,
+            minWidth: 0,
+            background: "transparent",
+            color: C.mustard,
+            border: `1px solid ${C.mustard}`,
+            borderRadius: 10,
+            padding: "9px 4px",
+            fontSize: 12.5,
+            fontWeight: 700,
+            cursor: "pointer",
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis"
+          }}
+        >
+          URLから追加
+        </button>
       </div>
-      {groups.map(g => (
-        <div key={g.category} style={{marginBottom: 16}}>
-          <div style={{fontSize: 13, color: C.mustard, fontWeight: 700, marginBottom: 8}}>{g.category} ({g.items.length})</div>
-          <div style={{display:'flex', flexWrap:'wrap', gap:6}}>
-            {g.items.map(r => <button key={r.id} onClick={() => onEdit(r)} style={{background:C.panel, border:`1px solid ${C.line}`, borderRadius:8, padding:'6px 12px', fontSize:13}}>{r.name}</button>)}
-          </div>
-        </div>
-      ))}
-      <button onClick={onImport} style={{width:'100%', padding:12, background:'none', border:`1px dashed ${C.line}`, color:C.muted, borderRadius:10, marginTop:10}}>一括インポート</button>
+      {recipes.length === 0 ? (
+        <p style={{ color: C.muted, fontSize: 14, textAlign: "center", marginTop: 20 }}>
+          まだレシピがありません。「新しいレシピ」から追加しましょう。
+        </p>
+      ) : (
+        groups.map((g) => <RecipeCategoryGroup key={g.category} group={g} onEdit={onEdit} />)
+      )}
+      <button
+        onClick={onImport}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 6,
+          width: "100%",
+          background: "transparent",
+          color: C.muted,
+          border: `1px dashed ${C.line}`,
+          borderRadius: 10,
+          padding: "12px",
+          fontSize: 13,
+          fontWeight: 600,
+          cursor: "pointer",
+          marginTop: 6
+        }}
+      >
+        一括インポート
+      </button>
     </div>
   );
 }
 
-// --- 共通コンポーネント (モーダル等) ---
+function RecipeFormModal({ form, onChange, onSave, onClose, onDelete }) {
+  function updateIngredient(idx, field, value) {
+    const next = [...form.ingredients];
+    next[idx] = { ...next[idx], [field]: value };
+    onChange({ ...form, ingredients: next });
+  }
+  function addRow() {
+    onChange({ ...form, ingredients: [...form.ingredients, { id: uid(), name: "", amount: "" }] });
+  }
+  function removeRow(idx) {
+    onChange({ ...form, ingredients: form.ingredients.filter((_, i) => i !== idx) });
+  }
+  return (
+    <Modal onClose={onClose} title={form.id ? "レシピを編集" : "新しいレシピ"}>
+      <label style={labelStyle}>レシピ名</label>
+      <input
+        value={form.name}
+        onChange={(e) => onChange({ ...form, name: e.target.value })}
+        placeholder="例: 肉じゃが"
+        style={inputStyle}
+      />
+      <label style={{ ...labelStyle, marginTop: 14 }}>カテゴリ</label>
+      <select
+        value={form.category || ""}
+        onChange={(e) => onChange({ ...form, category: e.target.value || null })}
+        style={{ ...inputStyle, appearance: "auto" }}
+      >
+        <option value="">自動({categorizeDish(form.name || "")})</option>
+        {DISH_CATEGORY_ORDER.map((c) => (
+          <option key={c} value={c}>{c}</option>
+        ))}
+      </select>
+      <label style={{ ...labelStyle, marginTop: 14 }}>材料</label>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {form.ingredients.map((ing, idx) => (
+          <div key={ing.id} style={{ display: "flex", gap: 6 }}>
+            <input
+              value={ing.name}
+              onChange={(e) => updateIngredient(idx, "name", e.target.value)}
+              placeholder="材料名"
+              style={{ ...inputStyle, flex: 2 }}
+            />
+            <input
+              value={ing.amount}
+              onChange={(e) => updateIngredient(idx, "amount", e.target.value)}
+              placeholder="分量"
+              style={{ ...inputStyle, flex: 1 }}
+            />
+            <button onClick={() => removeRow(idx)} style={iconBtnStyle}>
+              <X size={16} color={C.muted} />
+            </button>
+          </div>
+        ))}
+      </div>
+      <button
+        onClick={addRow}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 4,
+          background: "transparent",
+          border: "none",
+          color: C.mustard,
+          fontSize: 13,
+          cursor: "pointer",
+          marginTop: 8,
+          padding: 0
+        }}
+      >
+        <Plus size={13} /> 材料を追加
+      </button>
+      <div style={{ display: "flex", gap: 8, marginTop: 20 }}>
+        <button onClick={onClose} style={secondaryBtnStyle}>キャンセル</button>
+        <button onClick={() => onSave(form)} style={primaryBtnStyle}>保存</button>
+      </div>
+      {onDelete && (
+        <button
+          onClick={onDelete}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            justifyContent: "center",
+            width: "100%",
+            background: "transparent",
+            border: "none",
+            color: C.tomato,
+            fontSize: 13,
+            cursor: "pointer",
+            marginTop: 14,
+            padding: 4
+          }}
+        >
+          <Trash2 size={13} /> このレシピを削除
+        </button>
+      )}
+    </Modal>
+  );
+}
+
+const labelStyle = { fontSize: 12, color: C.muted, display: "block", marginBottom: 5 };
+
+function PhotoImportModal({ onMerge, onClose }) {
+  const [status, setStatus] = useState("idle");
+  const [errorMsg, setErrorMsg] = useState("");
+  const [extracted, setExtracted] = useState([]);
+  const [resultCount, setResultCount] = useState(null);
+
+  function fileToBase64(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result).split(",")[1] || "");
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function handleFile(e) {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    setStatus("loading");
+    setErrorMsg("");
+    setExtracted([]);
+    setResultCount(null);
+    try {
+      const base64 = await fileToBase64(file);
+      const prompt =
+        "この画像に写っている料理レシピを抽出してください。ページ内に複数のレシピがあれば全て含めてください。次のJSON形式のみを出力してください(説明文や前書き、コードブロック記号は一切不要): [{\"name\": \"料理名\", \"ingredients\": [{\"name\": \"材料名\", \"amount\": \"分量\"}]}] 材料が読み取れない場合はingredientsを空配列にしてください。";
+      const res = await fetch(GEMINI_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [{ text: prompt }, { inline_data: { mime_type: file.type || "image/jpeg", data: base64 } }]
+            }
+          ]
+        })
+      });
+      if (!res.ok) {
+        const errText = await res.text().catch(() => "");
+        throw new Error(`APIエラー (${res.status}) ${errText.slice(0, 200)}`);
+      }
+      const data = await res.json();
+      var _a, _b, _c, _d;
+      let text = ((_d = (_c = (_b = (_a = data.candidates) == null ? void 0 : _a[0]) == null ? void 0 : _b.content) == null ? void 0 : _c.parts) == null ? void 0 : _d[0].text) || "";
+      text = text.trim().replace(/^```json/i, "").replace(/^```/, "").replace(/```$/, "").trim();
+      let parsed;
+      try {
+        parsed = JSON.parse(text);
+      } catch (parseErr) {
+        throw new Error("読み取り結果を解析できませんでした。別の画像で試してください。");
+      }
+      if (!Array.isArray(parsed) || parsed.length === 0) {
+        throw new Error("レシピを読み取れませんでした。");
+      }
+      setExtracted(
+        parsed.map((r) => ({
+          id: uid(),
+          name: (r.name || "").trim(),
+          ingredients: Array.isArray(r.ingredients) ? r.ingredients : [],
+          checked: true
+        }))
+      );
+      setStatus("done");
+    } catch (err) {
+      setErrorMsg(err.message || String(err));
+      setStatus("error");
+    }
+  }
+
+  function toggleItem(id) {
+    setExtracted((items) => items.map((it) => (it.id === id ? { ...it, checked: !it.checked } : it)));
+  }
+  function updateItemName(id, value) {
+    setExtracted((items) => items.map((it) => (it.id === id ? { ...it, name: value } : it)));
+  }
+
+  function handleAdd() {
+    const selected = extracted.filter((it) => it.checked);
+    const added = onMerge(selected);
+    setResultCount(added);
+  }
+
+  return (
+    <Modal onClose={onClose} title="写真からレシピを追加">
+      <p style={{ fontSize: 12, color: C.muted, marginTop: 0, lineHeight: 1.6 }}>
+        料理本のページやレシピカードの写真を選ぶと、AIが料理名と材料を自動で読み取ります。読み取り結果は必ず確認してから追加してください。
+      </p>
+      {resultCount === null && (
+        <label
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 8,
+            border: `1px dashed ${C.mustard}`,
+            borderRadius: 10,
+            padding: "16px",
+            color: C.mustard,
+            fontSize: 14,
+            fontWeight: 700,
+            cursor: "pointer",
+            marginBottom: 14
+          }}
+        >
+          {status === "loading" ? "読み取り中…" : "画像を選ぶ"}
+          <input
+            type="file"
+            accept="image/*"
+            onChange={handleFile}
+            disabled={status === "loading"}
+            style={{ display: "none" }}
+          />
+        </label>
+      )}
+      {status === "error" && (
+        <div style={{ color: C.tomato, fontSize: 13, marginBottom: 12, lineHeight: 1.6 }}>
+          {errorMsg}
+        </div>
+      )}
+      {extracted.length > 0 && resultCount === null && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14 }}>
+          {extracted.map((it) => (
+            <div
+              key={it.id}
+              style={{
+                background: it.checked ? C.panel2 : "transparent",
+                border: `1px solid ${it.checked ? C.mustard : C.line}`,
+                borderRadius: 9,
+                padding: "10px 12px"
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span
+                  onClick={() => toggleItem(it.id)}
+                  style={{
+                    width: 16,
+                    height: 16,
+                    borderRadius: 4,
+                    flexShrink: 0,
+                    border: `1.5px solid ${it.checked ? C.mustard : C.muted}`,
+                    background: it.checked ? C.mustard : "transparent",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    cursor: "pointer"
+                  }}
+                >
+                  {it.checked && <Check size={11} color="#fff" strokeWidth={3} />}
+                </span>
+                <input
+                  value={it.name}
+                  onChange={(e) => updateItemName(it.id, e.target.value)}
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    background: "transparent",
+                    border: "none",
+                    borderBottom: `1px dashed ${C.line}`,
+                    fontSize: 14,
+                    fontWeight: 600,
+                    color: C.cream,
+                    padding: "2px 0",
+                    outline: "none"
+                  }}
+                />
+              </div>
+              <div style={{ fontSize: 11, color: C.muted, marginTop: 4, marginLeft: 24 }}>
+                {it.ingredients.length
+                  ? it.ingredients.map((i) => `${i.name}${i.amount ? `(${i.amount})` : ""}`).join(" / ")
+                  : "材料未検出"}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {resultCount !== null && (
+        <p style={{ color: C.mustard, fontSize: 14, fontWeight: 700, marginBottom: 14 }}>
+          {resultCount}件のレシピを追加しました
+        </p>
+      )}
+      <div style={{ display: "flex", gap: 8 }}>
+        <button onClick={onClose} style={secondaryBtnStyle}>
+          {resultCount === null ? "キャンセル" : "閉じる"}
+        </button>
+        {resultCount === null && extracted.length > 0 && (
+          <button onClick={handleAdd} style={primaryBtnStyle} disabled={!extracted.some((it) => it.checked)}>
+            選択したレシピを追加
+          </button>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+function UrlImportModal({ onMerge, onClose }) {
+  const [url, setUrl] = useState("");
+  const [status, setStatus] = useState("idle");
+  const [errorMsg, setErrorMsg] = useState("");
+  const [extracted, setExtracted] = useState([]);
+  const [resultCount, setResultCount] = useState(null);
+
+  async function handleFetch() {
+    const trimmed = url.trim();
+    if (!trimmed) return;
+    setStatus("loading");
+    setErrorMsg("");
+    setExtracted([]);
+    setResultCount(null);
+    try {
+      const prompt =
+        `次のURLのページに書いてある料理レシピを抽出してください。URL: ${trimmed}
+ページ内に複数のレシピがあれば全て含めてください。次のJSON形式のみを出力してください(説明文や前書き、コードブロック記号は一切不要): [{"name": "料理名", "ingredients": [{"name": "材料名", "amount": "分量"}]}] 材料が読み取れない場合はingredientsを空配列にしてください。`;
+      const res = await fetch(GEMINI_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          tools: [{ url_context: {} }]
+        })
+      });
+      if (!res.ok) {
+        const errText = await res.text().catch(() => "");
+        throw new Error(`APIエラー (${res.status}) ${errText.slice(0, 200)}`);
+      }
+      const data = await res.json();
+      var _a, _b, _c, _d;
+      let text = ((_d = (_c = (_b = (_a = data.candidates) == null ? void 0 : _a[0]) == null ? void 0 : _b.content) == null ? void 0 : _c.parts) == null ? void 0 : _d[0].text) || "";
+      text = text.trim().replace(/^```json/i, "").replace(/^```/, "").replace(/```$/, "").trim();
+      let parsed;
+      try {
+        parsed = JSON.parse(text);
+      } catch (parseErr) {
+        throw new Error("読み取り結果を解析できませんでした。別のURLで試してください。");
+      }
+      if (!Array.isArray(parsed) || parsed.length === 0) {
+        throw new Error("レシピを読み取れませんでした。ページが読み込めない可能性があります。");
+      }
+      setExtracted(
+        parsed.map((r) => ({
+          id: uid(),
+          name: (r.name || "").trim(),
+          ingredients: Array.isArray(r.ingredients) ? r.ingredients : [],
+          checked: true
+        }))
+      );
+      setStatus("done");
+    } catch (err) {
+      setErrorMsg(err.message || String(err));
+      setStatus("error");
+    }
+  }
+
+  function toggleItem(id) {
+    setExtracted((items) => items.map((it) => (it.id === id ? { ...it, checked: !it.checked } : it)));
+  }
+  function updateItemName(id, value) {
+    setExtracted((items) => items.map((it) => (it.id === id ? { ...it, name: value } : it)));
+  }
+
+  function handleAdd() {
+    const selected = extracted.filter((it) => it.checked);
+    const added = onMerge(selected);
+    setResultCount(added);
+  }
+
+  return (
+    <Modal onClose={onClose} title="URLからレシピを追加">
+      <p style={{ fontSize: 12, color: C.muted, marginTop: 0, lineHeight: 1.6 }}>
+        レシピサイトのURLを貼り付けると、AIが料理名と材料を自動で読み取ります。読み取り結果は必ず確認してから追加してください。
+      </p>
+      {resultCount === null && (
+        <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
+          <input
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleFetch()}
+            placeholder="https://..."
+            disabled={status === "loading"}
+            style={{ ...inputStyle, flex: 1 }}
+          />
+          <button
+            onClick={handleFetch}
+            style={{ ...primaryBtnStyle, flex: "0 0 auto", padding: "0 16px" }}
+            disabled={status === "loading" || !url.trim()}
+          >
+            {status === "loading" ? "読み込み中…" : "読み込む"}
+          </button>
+        </div>
+      )}
+      {status === "error" && (
+        <div style={{ color: C.tomato, fontSize: 13, marginBottom: 12, lineHeight: 1.6 }}>
+          {errorMsg}
+        </div>
+      )}
+      {extracted.length > 0 && resultCount === null && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14 }}>
+          {extracted.map((it) => (
+            <div
+              key={it.id}
+              style={{
+                background: it.checked ? C.panel2 : "transparent",
+                border: `1px solid ${C.mustard}`,
+                borderRadius: 9,
+                padding: "10px 12px"
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span
+                  onClick={() => toggleItem(it.id)}
+                  style={{
+                    width: 16,
+                    height: 16,
+                    borderRadius: 4,
+                    flexShrink: 0,
+                    border: `1.5px solid ${it.checked ? C.mustard : C.muted}`,
+                    background: it.checked ? C.mustard : "transparent",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    cursor: "pointer"
+                  }}
+                >
+                  {it.checked && <Check size={11} color="#fff" strokeWidth={3} />}
+                </span>
+                <input
+                  value={it.name}
+                  onChange={(e) => updateItemName(it.id, e.target.value)}
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    background: "transparent",
+                    border: "none",
+                    borderBottom: `1px dashed ${C.line}`,
+                    fontSize: 14,
+                    fontWeight: 600,
+                    color: C.cream,
+                    padding: "2px 0",
+                    outline: "none"
+                  }}
+                />
+              </div>
+              <div style={{ fontSize: 11, color: C.muted, marginTop: 4, marginLeft: 24 }}>
+                {it.ingredients.length
+                  ? it.ingredients.map((i) => `${i.name}${i.amount ? `(${i.amount})` : ""}`).join(" / ")
+                  : "材料未検出"}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {resultCount !== null && (
+                <p style={{ color: C.mustard, fontSize: 14, fontWeight: 700, marginBottom: 14 }}>
+                  {resultCount}件のレシピを追加しました
+                </p>
+              )}
+      <div style={{ display: "flex", gap: 8 }}>
+        <button onClick={onClose} style={secondaryBtnStyle}>
+          {resultCount === null ? "キャンセル" : "閉じる"}
+        </button>
+        {resultCount === null && extracted.length > 0 && (
+          <button onClick={handleAdd} style={primaryBtnStyle} disabled={!extracted.some((it) => it.checked)}>
+            選択したレシピを追加
+          </button>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+function ImportModal({ onImport, onClose }) {
+  const [text, setText] = useState("");
+  const count = text.split(/[\n,、]/).map((s) => s.trim()).filter(Boolean).length;
+  return (
+    <Modal onClose={onClose} title="レシピを一括インポート">
+      <p style={{ fontSize: 12, color: C.muted, marginTop: 0, lineHeight: 1.6 }}>
+        料理名を改行またはカンマ区切りで貼り付けてください。材料は未登録のレシピとして追加されます(あとで編集できます)。同じ名前のレシピはスキップされます。
+      </p>
+      <textarea
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder={"肉じゃが\n生姜焼き\nカレー"}
+        rows={10}
+        style={{ ...inputStyle, resize: "vertical", fontFamily: "'Inter', sans-serif" }}
+      />
+      <div style={{ fontSize: 11, color: C.muted, marginTop: 6 }}>{count}件を追加します</div>
+      <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+        <button onClick={onClose} style={secondaryBtnStyle}>キャンセル</button>
+        <button onClick={() => onImport(text)} style={primaryBtnStyle} disabled={!count}>インポート</button>
+      </div>
+    </Modal>
+  );
+}
+
+function ShoppingView({ list, extraItems, checked, onToggle, newExtra, setNewExtra, onAddExtra, onRemoveExtra }) {
+  const grouped = useMemo(() => {
+    const byName = {};
+    list.forEach((item) => {
+      byName[item.name] = {
+        key: item.name,
+        label: item.name,
+        amounts: [...item.amounts],
+        category: item.category || "その他",
+        manualIds: []
+      };
+    });
+    extraItems.forEach((item) => {
+      const name = item.text.trim();
+      if (byName[name]) {
+        byName[name].manualIds.push(item.id);
+      } else {
+        byName[name] = {
+          key: name,
+          label: name,
+          amounts: [],
+          category: item.category || "その他",
+          manualIds: [item.id]
+        };
+      }
+    });
+    const uncheckedEntries = [];
+    const checkedEntries = [];
+    Object.values(byName).forEach((entry) => {
+      if (checked[safeCheckKey(entry.key)]) checkedEntries.push(entry);
+      else uncheckedEntries.push(entry);
+    });
+    const byCat = {};
+    uncheckedEntries.forEach((entry) => {
+      if (!byCat[entry.category]) byCat[entry.category] = [];
+      byCat[entry.category].push(entry);
+    });
+    const groups = CATEGORY_ORDER.filter((c) => {
+      var _a;
+      return (_a = byCat[c]) == null ? void 0 : _a.length;
+    }).map((c) => ({ category: c, items: byCat[c] }));
+    return { groups, doneEntries: checkedEntries };
+  }, [list, extraItems, checked]);
+
+  const allEntries = useMemo(
+    () => [...grouped.groups.flatMap((g) => g.items), ...grouped.doneEntries],
+    [grouped]
+  );
+  const total = allEntries.length;
+  const doneCount = grouped.doneEntries.length;
+  function removeEntry(entry) {
+    entry.manualIds.forEach((id) => onRemoveExtra(id));
+  }
+  return (
+    <div>
+      <div
+        style={{
+          background: C.panel,
+          border: `1px dashed ${C.line}`,
+          borderRadius: 14,
+          padding: "16px 16px 8px",
+          position: "relative"
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
+          <span style={{ fontFamily: "'Kalam', cursive", fontSize: 20, color: C.mustard }}>買い物リスト</span>
+          <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 12, color: C.muted }}>{doneCount}/{total}</span>
+        </div>
+        {total === 0 ? (
+          <p style={{ color: C.muted, fontSize: 13, padding: "10px 0 16px" }}>
+            献立表にレシピを割り当てると，材料が自動でここに集まります。
+          </p>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column" }}>
+            {grouped.groups.map((group) => (
+              <div key={group.category} style={{ marginBottom: 4 }}>
+                <div
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: C.tomato,
+                    letterSpacing: 0.5,
+                    padding: "10px 2px 4px",
+                    textTransform: "uppercase"
+                  }}
+                >
+                  {group.category}
+                </div>
+                {group.items.map((entry) => (
+                  <ShoppingRow
+                    key={entry.key}
+                    checked={false}
+                    onToggle={() => onToggle(safeCheckKey(entry.key))}
+                    label={entry.label}
+                    sub={entry.amounts.join(" + ")}
+                    onRemove={entry.manualIds.length ? () => removeEntry(entry) : void 0}
+                  />
+                ))}
+              </div>
+            ))}
+            {grouped.doneEntries.length > 0 && (
+              <div style={{ marginBottom: 4 }}>
+                <div
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: C.muted,
+                    letterSpacing: 0.5,
+                    padding: "10px 2px 4px",
+                    textTransform: "uppercase"
+                  }}
+                >
+                  済み(24時間後に自動で消えます)
+                </div>
+                {grouped.doneEntries.map((entry) => (
+                  <ShoppingRow
+                    key={entry.key}
+                    checked={true}
+                    onToggle={() => onToggle(safeCheckKey(entry.key))}
+                    label={entry.label}
+                    sub={entry.amounts.join(" + ")}
+                    onRemove={entry.manualIds.length ? () => removeEntry(entry) : void 0}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        <div style={{ display: "flex", gap: 6, padding: "10px 0 4px" }}>
+          <input
+            value={newExtra}
+            onChange={(e) => setNewExtra(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && onAddExtra()}
+            placeholder="ほしいものを追加(例: 卵)"
+            style={{ ...inputStyle, background: "rgba(255,255,255,0.03)" }}
+          />
+          <button onClick={onAddExtra} style={{ ...primaryBtnStyle, flex: "0 0 44px", padding: 0 }}>
+            <Plus size={16} style={{ margin: "0 auto" }} />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Modal({ title, onClose, children }) {
   return (
-    <div style={{position:'fixed', inset:0, background:'rgba(0,0,0,0.6)', display:'flex', alignItems:'flex-end', justifyContent:'center', zIndex:100}} onClick={onClose}>
-      <div style={{background:C.bg, width:'100%', maxWidth:720, borderRadius:'20px 20px 0 0', padding:20, maxHeight:'85vh', overflowY:'auto'}} onClick={e=>e.stopPropagation()}>
-        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:15}}>
-          <h3 style={{margin:0, color:C.mustard}}>{title}</h3>
-          <button onClick={onClose} style={{border:'none', background:'none'}}><X size={20} color={C.muted}/></button>
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(10,15,11,0.65)",
+        display: "flex",
+        alignItems: "flex-end",
+        justifyContent: "center",
+        zIndex: 50
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: C.bg,
+          border: `1px solid ${C.line}`,
+          borderRadius: "18px 18px 0 0",
+          padding: "18px 18px 26px",
+          width: "100%",
+          maxWidth: 720,
+          maxHeight: "85vh",
+          overflowY: "auto"
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+          <span style={{ fontFamily: "'Kalam', cursive", fontSize: 19, color: C.mustard }}>{title}</span>
+          <button onClick={onClose} style={iconBtnStyle}>
+            <X size={18} color={C.muted} />
+          </button>
         </div>
         {children}
       </div>
@@ -453,72 +1934,7 @@ function Modal({ title, onClose, children }) {
   );
 }
 
-function RecipePickerModal({ recipes, onPick, onClose }) {
-  return (
-    <Modal title="レシピを選ぶ" onClose={onClose}>
-      <div style={{display:'flex', flexWrap:'wrap', gap:8}}>
-        {recipes.map(r => <button key={r.id} onClick={() => onPick(r.id)} style={{background:C.panel2, border:`1px solid ${C.line}`, padding:'8px 15px', borderRadius:8}}>{r.name}</button>)}
-      </div>
-    </Modal>
-  );
-}
-
-function RecipeFormModal({ form, onChange, onSave, onClose, onDelete }) {
-  return (
-    <Modal title={form.id ? "レシピ編集" : "新規レシピ"} onClose={onClose}>
-      <div style={{fontSize:12, color:C.muted, marginBottom:4}}>料理名</div>
-      <input className="auth-input" style={{maxWidth:'none'}} value={form.name} onChange={e=>onChange({...form, name:e.target.value})} />
-      <div style={{fontSize:12, color:C.muted, marginTop:10, marginBottom:4}}>材料</div>
-      {form.ingredients.map((ing, i) => (
-        <div key={i} style={{display:'flex', gap:6, marginBottom:6}}>
-          <input className="auth-input" style={{flex:2, marginBottom:0}} placeholder="材料名" value={ing.name} onChange={e=>{
-            const next = [...form.ingredients]; next[i].name = e.target.value; onChange({...form, ingredients:next});
-          }} />
-          <input className="auth-input" style={{flex:1, marginBottom:0}} placeholder="分量" value={ing.amount} onChange={e=>{
-            const next = [...form.ingredients]; next[i].amount = e.target.value; onChange({...form, ingredients:next});
-          }} />
-        </div>
-      ))}
-      <button onClick={()=>onChange({...form, ingredients:[...form.ingredients, {id:uid(),name:"",amount:""}]})} style={{background:'none', border:'none', color:C.mustard, fontSize:13}}>+ 材料を追加</button>
-      <div style={{display:'flex', gap:10, marginTop:20}}>
-        <button className="auth-btn auth-btn-primary" style={{flex:1}} onClick={()=>onSave(form)}>保存する</button>
-        {onDelete && <button onClick={onDelete} style={{background:'none', border:'none', color:C.tomato}}>削除</button>}
-      </div>
-    </Modal>
-  );
-}
-
-function PhotoImportModal({ onMerge, onClose }) {
-  const handleFile = async (e) => {
-    const file = e.target.files[0]; if (!file) return;
-    const reader = new FileReader();
-    reader.onload = async () => {
-      const base64 = reader.result.split(',')[1];
-      const res = await fetch(GEMINI_URL, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contents: [{ parts: [{ text: "Extract recipe as JSON: [{\"name\":\"Name\",\"ingredients\":[{\"name\":\"Ing\",\"amount\":\"Qty\"}]}]" }, { inline_data: { mime_type: file.type, data: base64 } }] }] })
-      });
-      const data = await res.json();
-      const text = data.candidates[0].content.parts[0].text.replace(/```json|```/g, "").trim();
-      const parsed = JSON.parse(text).map(r => ({ ...r, id: uid() }));
-      onMerge(parsed);
-      onClose();
-    };
-    reader.readAsDataURL(file);
-  };
-  return <Modal title="写真から追加" onClose={onClose}><input type="file" onChange={handleFile} /></Modal>;
-}
-function UrlImportModal({ onClose }) { return <Modal title="URLから追加" onClose={onClose}><p>開発中...</p></Modal>; }
-function ImportModal({ onImport, onClose }) {
-  const [val, setVal] = useState("");
-  return <Modal title="一括インポート" onClose={onClose}>
-    <textarea className="auth-input" style={{maxWidth:'none', height:200}} value={val} onChange={e=>setVal(e.target.value)} placeholder="料理名を改行区切りで入力"/>
-    <button className="auth-btn auth-btn-primary" onClick={()=>onImport(val)}>追加する</button>
-  </Modal>;
-}
-
-const root = ReactDOM.createRoot(document.getElementById("root"));
-root.render(<App />);
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
 </script>
 </body>
 </html>
