@@ -66,7 +66,7 @@ function Loader2(p) { return <Icon {...p}><path d="M21 12a9 9 0 1 1-6.219-8.56" 
 
 // --- 定数・ユーティリティ ---
 const GEMINI_API_KEY = "AQ.Ab8RN6JpiE8VSnbFrBCR43HN9rQ_jeL7yhj2LpvigAM1J5h8EA";
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro-preview:generateContent?key=${GEMINI_API_KEY}`;
 const DAYS = ["日", "月", "火", "水", "木", "金", "土"];
 const SLOTS = [{ key: "breakfast", label: "朝" }, { key: "lunch", label: "昼" }, { key: "dinner", label: "晩" }];
 const CATEGORY_ORDER = ["肉類", "魚介類", "野菜", "果物", "卵・乳製品", "豆・大豆製品", "米・麺・パン", "調味料・乾物", "その他"];
@@ -132,7 +132,12 @@ function App() {
   const login = () => auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()).catch(() => auth.signInWithRedirect(new firebase.auth.GoogleAuthProvider()));
   const logout = () => auth.signOut();
   const createFamily = async () => {
-    const newId = Math.random().toString(36).slice(2, 10).toUpperCase();
+    // 紛らわしい文字(0, O, 1, I, L)を除外した確実なID作成
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    let newId = "";
+    for (let i = 0; i < 6; i++) {
+      newId += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
     await db.ref(`users/${user.uid}/familyId`).set(newId);
     setFamilyId(newId);
   };
@@ -141,6 +146,15 @@ function App() {
     const cleanId = id.trim().toUpperCase();
     await db.ref(`users/${user.uid}/familyId`).set(cleanId);
     setFamilyId(cleanId);
+  };
+  
+  // 家族IDの解除処理
+  const resetFamilyId = async () => {
+    if (!user) return;
+    if (confirm("本当にこの家族グループを抜けますか？\n（献立データは削除されませんが、招待コードを入力し直す画面に戻ります）")) {
+      await db.ref(`users/${user.uid}/familyId`).remove();
+      setFamilyId(null);
+    }
   };
 
   if (loading) return <div className="auth-screen">読み込み中...</div>;
@@ -163,7 +177,7 @@ function App() {
     </div>
   );
 
-  return <MealPlanner familyId={familyId} onLogout={logout} />;
+  return <MealPlanner familyId={familyId} onLogout={logout} onResetFamily={resetFamilyId} />;
 }
 
 // --- 献立プランナー メインコンテンツ ---
@@ -173,7 +187,7 @@ const styles = {
   body: { padding: "14px 16px 90px", maxWidth: 720, margin: "0 auto" }
 };
 
-function MealPlanner({ familyId, onLogout }) {
+function MealPlanner({ familyId, onLogout, onResetFamily }) {
   const [tab, setTab] = useState("plan");
   const [recipes, setRecipes] = useState([]);
   const [planByWeek, setPlanByWeek] = useState({});
@@ -271,7 +285,10 @@ function MealPlanner({ familyId, onLogout }) {
   return (
     <div style={styles.app}>
       <header style={{position:'sticky', top:0, zIndex:20, background:'rgba(255,251,246,0.92)', backdropFilter:'blur(6px)', borderBottom:`1px solid ${C.line}`, padding:'8px 16px', display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-        <div style={{fontSize:'12px', color:C.muted}}>家族ID: <strong>{familyId}</strong></div>
+        <div style={{fontSize:'12px', color:C.muted}}>
+          家族ID: <strong style={{color: C.mustard}}>{familyId}</strong>
+          <button onClick={onResetFamily} style={{marginLeft:'8px', padding:'2px 6px', fontSize:'10px', color:C.muted, background:'none', border:`1px solid ${C.line}`, borderRadius:'4px', cursor:'pointer'}}>変更</button>
+        </div>
         <div style={{display:'flex', alignItems:'center', gap:'12px'}}>
            <span style={{fontSize:10, color:C.muted}}>{saving ? "保存中..." : "保存済み"}</span>
            <button onClick={onLogout} style={{fontSize:10, color:C.muted, background:'none', border:'none', textDecoration:'underline'}}>ログアウト</button>
@@ -471,8 +488,6 @@ function RecipeFormModal({ form, onChange, onSave, onClose, onDelete }) {
   );
 }
 
-// ※ PhotoImportModal, UrlImportModal, ImportModal は長くなるため前回のロジックを流用。
-// (以下にAI抽出の主要な実装のみ追加)
 function PhotoImportModal({ onMerge, onClose }) {
   const handleFile = async (e) => {
     const file = e.target.files[0]; if (!file) return;
