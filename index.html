@@ -341,16 +341,39 @@ const SAMPLE_RECIPES = [
 function App() {
   const [user, setUser] = useState(null);
   const [familyId, setFamilyId] = useState(null);
+  const [pendingFamilyId, setPendingFamilyId] = useState(null);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     return auth.onAuthStateChanged(async (u) => {
       if (u) {
         setUser(u);
-        const snap = await firebase.database().ref(`users/${u.uid}/familyId`).get();
-        if (snap.exists()) setFamilyId(snap.val());
+        const db = firebase.database();
+        const snap = await db.ref(`users/${u.uid}`).get();
+        const data = snap.val() || {};
+        if (data.familyId) {
+          setFamilyId(data.familyId);
+          setPendingFamilyId(null);
+          db.ref(`families/${data.familyId}/members/${u.uid}`).set(true).catch(() => {});
+        } else if (data.pendingFamilyId) {
+          const memberSnap = await db.ref(`families/${data.pendingFamilyId}/members/${u.uid}`).get();
+          if (memberSnap.exists()) {
+            await db.ref(`users/${u.uid}/familyId`).set(data.pendingFamilyId);
+            await db.ref(`users/${u.uid}/pendingFamilyId`).remove();
+            db.ref(`families/${data.pendingFamilyId}/pendingRequests/${u.uid}`).remove().catch(() => {});
+            setFamilyId(data.pendingFamilyId);
+            setPendingFamilyId(null);
+          } else {
+            setFamilyId(null);
+            setPendingFamilyId(data.pendingFamilyId);
+          }
+        } else {
+          setFamilyId(null);
+          setPendingFamilyId(null);
+        }
       } else {
         setUser(null);
         setFamilyId(null);
+        setPendingFamilyId(null);
       }
       setLoading(false);
     });
@@ -365,19 +388,50 @@ function App() {
     for (let i = 0; i < 6; i++) {
       newId += chars.charAt(Math.floor(Math.random() * chars.length));
     }
-    await firebase.database().ref(`users/${user.uid}/familyId`).set(newId);
+    const db = firebase.database();
+    await db.ref(`families/${newId}/members/${user.uid}`).set(true);
+    await db.ref(`users/${user.uid}/familyId`).set(newId);
     setFamilyId(newId);
+    setPendingFamilyId(null);
   };
-  const joinFamily = async (id) => {
+  const requestJoinFamily = async (id) => {
     if (!id) return;
     const cleanId = id.trim().toUpperCase();
-    await firebase.database().ref(`users/${user.uid}/familyId`).set(cleanId);
-    setFamilyId(cleanId);
+    const db = firebase.database();
+    await db.ref(`families/${cleanId}/pendingRequests/${user.uid}`).set({
+      email: user.email || "",
+      requestedAt: firebase.database.ServerValue.TIMESTAMP
+    });
+    await db.ref(`users/${user.uid}/pendingFamilyId`).set(cleanId);
+    setPendingFamilyId(cleanId);
+  };
+  const cancelPendingRequest = async () => {
+    if (!user || !pendingFamilyId) return;
+    const db = firebase.database();
+    await db.ref(`families/${pendingFamilyId}/pendingRequests/${user.uid}`).remove().catch(() => {});
+    await db.ref(`users/${user.uid}/pendingFamilyId`).remove();
+    setPendingFamilyId(null);
+  };
+  const recheckApproval = async () => {
+    if (!user || !pendingFamilyId) return;
+    const db = firebase.database();
+    const memberSnap = await db.ref(`families/${pendingFamilyId}/members/${user.uid}`).get();
+    if (memberSnap.exists()) {
+      await db.ref(`users/${user.uid}/familyId`).set(pendingFamilyId);
+      await db.ref(`users/${user.uid}/pendingFamilyId`).remove();
+      db.ref(`families/${pendingFamilyId}/pendingRequests/${user.uid}`).remove().catch(() => {});
+      setFamilyId(pendingFamilyId);
+      setPendingFamilyId(null);
+    } else {
+      alert("\u307E\u3060\u627F\u8A8D\u3055\u308C\u3066\u3044\u307E\u305B\u3093\u3002\u5BB6\u65CF\u306B\u627F\u8A8D\u3092\u4F9D\u983C\u3057\u3066\u304B\u3089\u3082\u3046\u4E00\u5EA6\u304A\u8A66\u3057\u304F\u3060\u3055\u3044\u3002");
+    }
   };
   const resetFamilyId = async () => {
-    if (!user) return;
+    if (!user || !familyId) return;
     if (confirm("\u672C\u5F53\u306B\u3053\u306E\u5BB6\u65CF\u30B0\u30EB\u30FC\u30D7\u3092\u6297\u3051\u307E\u3059\u304B\uFF1F\n\uFF08\u732E\u7ACB\u30C7\u30FC\u30BF\u306F\u524A\u9664\u3055\u308C\u307E\u305B\u3093\u304C\u3001\u62DB\u5F85\u30B3\u30FC\u30C9\u3092\u5165\u529B\u3057\u76F4\u3059\u753B\u9762\u306B\u623B\u308A\u307E\u3059\uFF09")) {
-      await firebase.database().ref(`users/${user.uid}/familyId`).remove();
+      const db = firebase.database();
+      await db.ref(`users/${user.uid}/familyId`).remove();
+      await db.ref(`families/${familyId}/members/${user.uid}`).remove().catch(() => {});
       setFamilyId(null);
     }
   };
@@ -397,22 +451,68 @@ function App() {
       /* @__PURE__ */ React.createElement("button", { className: "auth-btn auth-btn-primary", onClick: login }, "Google\u3067\u30ED\u30B0\u30A4\u30F3")
     );
   }
-  if (!familyId) {
-    return /* @__PURE__ */ React.createElement(FamilySetup, { onCreate: createFamily, onJoin: joinFamily, onLogout: () => auth.signOut() });
+  if (familyId) {
+    return /* @__PURE__ */ React.createElement(MealPlanner, { familyId, user, onLogout: () => auth.signOut(), onResetFamily: resetFamilyId });
   }
-  return /* @__PURE__ */ React.createElement(MealPlanner, { familyId, user, onLogout: () => auth.signOut(), onResetFamily: resetFamilyId });
+  if (pendingFamilyId) {
+    return /* @__PURE__ */ React.createElement(PendingApproval, {
+      familyId: pendingFamilyId,
+      onCancel: cancelPendingRequest,
+      onRecheck: recheckApproval,
+      onLogout: () => auth.signOut()
+    });
+  }
+  return /* @__PURE__ */ React.createElement(FamilySetup, { onCreate: createFamily, onJoin: requestJoinFamily, onLogout: () => auth.signOut() });
+}
+function PendingApproval({ familyId, onCancel, onRecheck, onLogout }) {
+  const [checking, setChecking] = useState(false);
+  async function handleRecheck() {
+    setChecking(true);
+    await onRecheck();
+    setChecking(false);
+  }
+  return /* @__PURE__ */ React.createElement(
+    "div",
+    { className: "auth-screen" },
+    /* @__PURE__ */ React.createElement("h2", { style: { fontSize: "20px", color: "#2B231D", marginBottom: "14px" } }, "\u627F\u8A8D\u5F85\u3061"),
+    /* @__PURE__ */ React.createElement(
+      "p",
+      { style: { fontSize: "14px", color: "#9C897A", marginBottom: "6px" } },
+      "\u5BB6\u65CF ID \u300C",
+      /* @__PURE__ */ React.createElement("strong", { style: { color: "#FF7A1A" } }, familyId),
+      "\u300D\u3078\u306E\u53C2\u52A0\u3092\u30EA\u30AF\u30A8\u30B9\u30C8\u4E2D\u3067\u3059\u3002"
+    ),
+    /* @__PURE__ */ React.createElement("p", { style: { fontSize: "13px", color: "#9C897A", marginBottom: "30px" } }, "\u65E2\u306B\u53C2\u52A0\u3057\u3066\u3044\u308B\u5BB6\u65CF\u306E\u8AB0\u304B\u306B\u627F\u8A8D\u3057\u3066\u3082\u3089\u3046\u3068\u5229\u7528\u3067\u304D\u307E\u3059\u3002"),
+    /* @__PURE__ */ React.createElement(
+      "button",
+      { className: "auth-btn auth-btn-primary", onClick: handleRecheck, disabled: checking },
+      checking ? "\u78BA\u8A8D\u4E2D\u2026" : "\u627F\u8A8D\u72B6\u6CC1\u3092\u78BA\u8A8D"
+    ),
+    /* @__PURE__ */ React.createElement("button", { className: "auth-btn auth-btn-outline", onClick: onCancel }, "\u30EA\u30AF\u30A8\u30B9\u30C8\u3092\u53D6\u308A\u6D88\u3059"),
+    /* @__PURE__ */ React.createElement(
+      "button",
+      { onClick: onLogout, style: { marginTop: "40px", background: "none", border: "none", color: "#9C897A", textDecoration: "underline", cursor: "pointer" } },
+      "\u30ED\u30B0\u30A2\u30A6\u30C8"
+    )
+  );
 }
 function FamilySetup({ onCreate, onJoin, onLogout }) {
   const [input, setInput] = useState("");
+  const [sent, setSent] = useState(false);
+  async function handleJoin() {
+    await onJoin(input);
+    setSent(true);
+  }
   return /* @__PURE__ */ React.createElement(
     "div",
     { className: "auth-screen" },
     /* @__PURE__ */ React.createElement("h2", { style: { fontSize: "20px", color: "#2B231D", marginBottom: "20px" } }, "\u5BB6\u65CF\u30B0\u30EB\u30FC\u30D7\u8A2D\u5B9A"),
     /* @__PURE__ */ React.createElement("button", { className: "auth-btn auth-btn-primary", onClick: onCreate }, "\u65B0\u3057\u304F\u5BB6\u65CF\u30B0\u30EB\u30FC\u30D7\u3092\u4F5C\u308B"),
     /* @__PURE__ */ React.createElement("div", { style: { margin: "20px 0", color: "#9C897A", fontSize: "14px" } }, "\u307E\u305F\u306F"),
-    /* @__PURE__ */ React.createElement("p", { style: { fontSize: "14px", marginBottom: "10px" } }, "\u62DB\u5F85\u30B3\u30FC\u30C9\u3092\u5165\u529B\u3057\u3066\u53C2\u52A0\u3059\u308B\uFF1A"),
+    /* @__PURE__ */ React.createElement("p", { style: { fontSize: "14px", marginBottom: "10px" } }, "\u62DB\u5F85\u30B3\u30FC\u30C9\u3092\u5165\u529B\u3057\u3066\u53C2\u52A0\u3092\u30EA\u30AF\u30A8\u30B9\u30C8\u3059\u308B\uFF1A"),
     /* @__PURE__ */ React.createElement("input", { className: "auth-input", placeholder: "\u4F8B: AB123XYZ", value: input, onChange: (e) => setInput(e.target.value) }),
-    /* @__PURE__ */ React.createElement("button", { className: "auth-btn auth-btn-outline", onClick: () => onJoin(input) }, "\u30B0\u30EB\u30FC\u30D7\u306B\u53C2\u52A0"),
+    /* @__PURE__ */ React.createElement("button", { className: "auth-btn auth-btn-outline", onClick: handleJoin, disabled: sent }, sent ? "\u30EA\u30AF\u30A8\u30B9\u30C8\u6E08\u307F" : "\u53C2\u52A0\u3092\u30EA\u30AF\u30A8\u30B9\u30C8"),
+    /* @__PURE__ */ React.createElement("p", { style: { fontSize: "11px", color: "#9C897A", marginTop: "10px", maxWidth: 280 } }, "\u203B\u30B3\u30FC\u30C9\u3092\u5165\u529B\u3057\u3066\u3082\u3001\u65E2\u5B58\u306E\u5BB6\u65CF\u30E1\u30F3\u30D0\u30FC\u304C\u627F\u8A8D\u3059\u308B\u307E\u3067\u306F\u30C7\u30FC\u30BF\u306B\u30A2\u30AF\u30BB\u30B9\u3067\u304D\u307E\u305B\u3093\u3002"),
     /* @__PURE__ */ React.createElement(
       "button",
       { onClick: onLogout, style: { marginTop: "40px", background: "none", border: "none", color: "#9C897A", textDecoration: "underline", cursor: "pointer" } },
@@ -438,6 +538,23 @@ function MealPlanner({ familyId, user, onLogout, onResetFamily }) {
   const [importOpen, setImportOpen] = useState(false);
   const [photoImportOpen, setPhotoImportOpen] = useState(false);
   const [urlImportOpen, setUrlImportOpen] = useState(false);
+  const [pendingRequests, setPendingRequests] = useState({});
+  const [showRequests, setShowRequests] = useState(false);
+  useEffect(() => {
+    const ref = firebase.database().ref(`families/${familyId}/pendingRequests`);
+    const listener = ref.on("value", (snap) => {
+      setPendingRequests(snap.val() || {});
+    });
+    return () => ref.off("value", listener);
+  }, [familyId]);
+  function approveMember(uid) {
+    const db = firebase.database();
+    db.ref(`families/${familyId}/members/${uid}`).set(true);
+    db.ref(`families/${familyId}/pendingRequests/${uid}`).remove();
+  }
+  function rejectMember(uid) {
+    firebase.database().ref(`families/${familyId}/pendingRequests/${uid}`).remove();
+  }
   const [mealPrefs, setMealPrefs] = useState({ allergies: "", dislikes: "", family: "", weekdaySlots: DEFAULT_SLOT_SEL, weekendSlots: DEFAULT_SLOT_SEL, extraConditions: "" });
   const [categoryOrder, setCategoryOrder] = useState(CATEGORY_ORDER);
   const [newExtra, setNewExtra] = useState("");
@@ -693,7 +810,7 @@ function MealPlanner({ familyId, user, onLogout, onResetFamily }) {
   if (!loaded) {
     return /* @__PURE__ */ React.createElement("div", { style: { ...styles.app, alignItems: "center", justifyContent: "center", display: "flex" } }, /* @__PURE__ */ React.createElement(Loader2, { className: "spin", size: 28, color: C.mustard }), /* @__PURE__ */ React.createElement("style", null, `.spin{animation:spin 1s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}`));
   }
-  return /* @__PURE__ */ React.createElement("div", { style: styles.app }, /* @__PURE__ */ React.createElement("link", { rel: "preconnect", href: "https://fonts.googleapis.com" }), /* @__PURE__ */ React.createElement("style", null, FONT_IMPORT), /* @__PURE__ */ React.createElement(Header, { familyId, saving, onLogout, onResetFamily }), /* @__PURE__ */ React.createElement("div", { style: styles.body }, tab === "plan" && /* @__PURE__ */ React.createElement(
+  return /* @__PURE__ */ React.createElement("div", { style: styles.app }, /* @__PURE__ */ React.createElement("link", { rel: "preconnect", href: "https://fonts.googleapis.com" }), /* @__PURE__ */ React.createElement("style", null, FONT_IMPORT), /* @__PURE__ */ React.createElement(Header, { familyId, saving, onLogout, onResetFamily, pendingCount: Object.keys(pendingRequests).length, onOpenRequests: () => setShowRequests(true) }), /* @__PURE__ */ React.createElement("div", { style: styles.body }, tab === "plan" && /* @__PURE__ */ React.createElement(
     PlanView,
     {
       planByWeek,
@@ -755,7 +872,7 @@ function MealPlanner({ familyId, user, onLogout, onResetFamily }) {
         setRecipeForm(null);
       } : null
     }
-  ), importOpen && /* @__PURE__ */ React.createElement(ImportModal, { onImport: bulkImportRecipes, onClose: () => setImportOpen(false) }), photoImportOpen && /* @__PURE__ */ React.createElement(PhotoImportModal, { onMerge: mergePhotoRecipes, onClose: () => setPhotoImportOpen(false) }), urlImportOpen && /* @__PURE__ */ React.createElement(UrlImportModal, { onMerge: mergePhotoRecipes, onClose: () => setUrlImportOpen(false) }), /* @__PURE__ */ React.createElement(BottomNav, { tab, setTab }));
+  ), importOpen && /* @__PURE__ */ React.createElement(ImportModal, { onImport: bulkImportRecipes, onClose: () => setImportOpen(false) }), photoImportOpen && /* @__PURE__ */ React.createElement(PhotoImportModal, { onMerge: mergePhotoRecipes, onClose: () => setPhotoImportOpen(false) }), urlImportOpen && /* @__PURE__ */ React.createElement(UrlImportModal, { onMerge: mergePhotoRecipes, onClose: () => setUrlImportOpen(false) }), showRequests && /* @__PURE__ */ React.createElement(PendingRequestsModal, { requests: pendingRequests, onApprove: approveMember, onReject: rejectMember, onClose: () => setShowRequests(false) }), /* @__PURE__ */ React.createElement(BottomNav, { tab, setTab }));
 }
 const C = {
   bg: "#FFFBF6",
@@ -784,7 +901,41 @@ const styles = {
     boxSizing: "border-box"
   }
 };
-function Header({ familyId, saving, onLogout, onResetFamily }) {
+function PendingRequestsModal({ requests, onApprove, onReject, onClose }) {
+  const entries = Object.entries(requests || {});
+  return /* @__PURE__ */ React.createElement(
+    Modal,
+    { title: "\u53C2\u52A0\u30EA\u30AF\u30A8\u30B9\u30C8", onClose },
+    entries.length === 0 && /* @__PURE__ */ React.createElement("p", { style: { fontSize: 13, color: C.muted } }, "\u73FE\u5728\u3001\u4FDD\u7559\u4E2D\u306E\u30EA\u30AF\u30A8\u30B9\u30C8\u306F\u3042\u308A\u307E\u305B\u3093\u3002"),
+    /* @__PURE__ */ React.createElement(
+      "div",
+      { style: { display: "flex", flexDirection: "column", gap: 10 } },
+      entries.map(([uid, info]) => /* @__PURE__ */ React.createElement(
+        "div",
+        {
+          key: uid,
+          style: { background: C.panel2, borderRadius: 10, padding: "10px 12px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }
+        },
+        /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13, color: C.cream, wordBreak: "break-all" } }, (info && info.email) || "\u30E1\u30FC\u30EB\u30A2\u30C9\u30EC\u30B9\u4E0D\u660E"),
+        /* @__PURE__ */ React.createElement(
+          "div",
+          { style: { display: "flex", gap: 6, flexShrink: 0 } },
+          /* @__PURE__ */ React.createElement(
+            "button",
+            { onClick: () => onApprove(uid), style: { fontSize: 12, padding: "5px 10px", borderRadius: 6, border: "none", background: C.mustard, color: "#fff", cursor: "pointer" } },
+            "\u627F\u8A8D"
+          ),
+          /* @__PURE__ */ React.createElement(
+            "button",
+            { onClick: () => onReject(uid), style: { fontSize: 12, padding: "5px 10px", borderRadius: 6, border: `1px solid ${C.line}`, background: "transparent", color: C.muted, cursor: "pointer" } },
+            "\u62D2\u5426"
+          )
+        )
+      ))
+    )
+  );
+}
+function Header({ familyId, saving, onLogout, onResetFamily, pendingCount, onOpenRequests }) {
   return /* @__PURE__ */ React.createElement(
     "div",
     {
@@ -820,6 +971,16 @@ function Header({ familyId, saving, onLogout, onResetFamily }) {
             style: { padding: "2px 6px", fontSize: 10, color: C.muted, background: "none", border: `1px solid ${C.line}`, borderRadius: 4, cursor: "pointer" }
           },
           "\u5909\u66F4"
+        ),
+        pendingCount > 0 && /* @__PURE__ */ React.createElement(
+          "button",
+          {
+            onClick: onOpenRequests,
+            style: { padding: "2px 8px", fontSize: 10, color: "#fff", background: C.tomato, border: "none", borderRadius: 999, cursor: "pointer", fontWeight: 700 }
+          },
+          "\u53C2\u52A0\u30EA\u30AF\u30A8\u30B9\u30C8 ",
+          pendingCount,
+          "\u4EF6"
         )
       ),
       /* @__PURE__ */ React.createElement(
