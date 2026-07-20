@@ -435,6 +435,37 @@ function App() {
       setFamilyId(null);
     }
   };
+  const deleteAccount = async () => {
+    if (!user) return;
+    if (!confirm("\u672C\u5F53\u306B\u30A2\u30AB\u30A6\u30F3\u30C8\u3092\u524A\u9664\u3057\u307E\u3059\u304B\uFF1F\n\u3053\u306E\u64CD\u4F5C\u306F\u53D6\u308A\u6D88\u305B\u307E\u305B\u3093\u3002\u30ED\u30B0\u30A4\u30F3\u60C5\u5831\u3068\u3053\u306E\u30A2\u30AB\u30A6\u30F3\u30C8\u306B\u95A2\u3059\u308B\u767B\u9332\u60C5\u5831\u304C\u524A\u9664\u3055\u308C\u307E\u3059\u3002\n\uFF08\u5BB6\u65CF\u3068\u5171\u6709\u3057\u3066\u3044\u305F\u732E\u7ACB\u30C7\u30FC\u30BF\u81EA\u4F53\u306F\u524A\u9664\u3055\u308C\u307E\u305B\u3093\uFF09")) return;
+    async function cleanupUserData() {
+      const db = firebase.database();
+      if (familyId) {
+        await db.ref(`families/${familyId}/members/${user.uid}`).remove().catch(() => {});
+      }
+      if (pendingFamilyId) {
+        await db.ref(`families/${pendingFamilyId}/pendingRequests/${user.uid}`).remove().catch(() => {});
+      }
+      await db.ref(`users/${user.uid}`).remove().catch(() => {});
+    }
+    try {
+      await cleanupUserData();
+      await user.delete();
+    } catch (err) {
+      if (err && err.code === "auth/requires-recent-login") {
+        try {
+          const provider = new firebase.auth.GoogleAuthProvider();
+          await user.reauthenticateWithPopup(provider);
+          await cleanupUserData();
+          await user.delete();
+        } catch (err2) {
+          alert("\u524A\u9664\u306B\u5931\u6557\u3057\u307E\u3057\u305F\u3002\u6642\u9593\u3092\u304A\u3044\u3066\u3082\u3046\u4E00\u5EA6\u304A\u8A66\u3057\u304F\u3060\u3055\u3044\u3002");
+        }
+      } else {
+        alert("\u524A\u9664\u306B\u5931\u6557\u3057\u307E\u3057\u305F\u3002" + (err && err.message ? "\n" + err.message : ""));
+      }
+    }
+  };
   if (loading) {
     return /* @__PURE__ */ React.createElement(
       "div",
@@ -452,19 +483,20 @@ function App() {
     );
   }
   if (familyId) {
-    return /* @__PURE__ */ React.createElement(MealPlanner, { familyId, user, onLogout: () => auth.signOut(), onResetFamily: resetFamilyId });
+    return /* @__PURE__ */ React.createElement(MealPlanner, { familyId, user, onLogout: () => auth.signOut(), onResetFamily: resetFamilyId, onDeleteAccount: deleteAccount });
   }
   if (pendingFamilyId) {
     return /* @__PURE__ */ React.createElement(PendingApproval, {
       familyId: pendingFamilyId,
       onCancel: cancelPendingRequest,
       onRecheck: recheckApproval,
-      onLogout: () => auth.signOut()
+      onLogout: () => auth.signOut(),
+      onDeleteAccount: deleteAccount
     });
   }
-  return /* @__PURE__ */ React.createElement(FamilySetup, { onCreate: createFamily, onJoin: requestJoinFamily, onLogout: () => auth.signOut() });
+  return /* @__PURE__ */ React.createElement(FamilySetup, { onCreate: createFamily, onJoin: requestJoinFamily, onLogout: () => auth.signOut(), onDeleteAccount: deleteAccount });
 }
-function PendingApproval({ familyId, onCancel, onRecheck, onLogout }) {
+function PendingApproval({ familyId, onCancel, onRecheck, onLogout, onDeleteAccount }) {
   const [checking, setChecking] = useState(false);
   async function handleRecheck() {
     setChecking(true);
@@ -493,10 +525,15 @@ function PendingApproval({ familyId, onCancel, onRecheck, onLogout }) {
       "button",
       { onClick: onLogout, style: { marginTop: "40px", background: "none", border: "none", color: "#9C897A", textDecoration: "underline", cursor: "pointer" } },
       "\u30ED\u30B0\u30A2\u30A6\u30C8"
+    ),
+    /* @__PURE__ */ React.createElement(
+      "button",
+      { onClick: onDeleteAccount, style: { marginTop: "10px", background: "none", border: "none", color: "#E1432B", fontSize: "12px", textDecoration: "underline", cursor: "pointer" } },
+      "\u30A2\u30AB\u30A6\u30F3\u30C8\u3092\u524A\u9664"
     )
   );
 }
-function FamilySetup({ onCreate, onJoin, onLogout }) {
+function FamilySetup({ onCreate, onJoin, onLogout, onDeleteAccount }) {
   const [input, setInput] = useState("");
   const [sent, setSent] = useState(false);
   async function handleJoin() {
@@ -517,10 +554,15 @@ function FamilySetup({ onCreate, onJoin, onLogout }) {
       "button",
       { onClick: onLogout, style: { marginTop: "40px", background: "none", border: "none", color: "#9C897A", textDecoration: "underline", cursor: "pointer" } },
       "\u30ED\u30B0\u30A2\u30A6\u30C8"
+    ),
+    /* @__PURE__ */ React.createElement(
+      "button",
+      { onClick: onDeleteAccount, style: { marginTop: "10px", background: "none", border: "none", color: "#E1432B", fontSize: "12px", textDecoration: "underline", cursor: "pointer" } },
+      "\u30A2\u30AB\u30A6\u30F3\u30C8\u3092\u524A\u9664"
     )
   );
 }
-function MealPlanner({ familyId, user, onLogout, onResetFamily }) {
+function MealPlanner({ familyId, user, onLogout, onResetFamily, onDeleteAccount }) {
   const [tab, setTab] = useState("plan");
   const [recipes, setRecipes] = useState([]);
   const [planByWeek, setPlanByWeek] = useState({});
@@ -810,7 +852,7 @@ function MealPlanner({ familyId, user, onLogout, onResetFamily }) {
   if (!loaded) {
     return /* @__PURE__ */ React.createElement("div", { style: { ...styles.app, alignItems: "center", justifyContent: "center", display: "flex" } }, /* @__PURE__ */ React.createElement(Loader2, { className: "spin", size: 28, color: C.mustard }), /* @__PURE__ */ React.createElement("style", null, `.spin{animation:spin 1s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}`));
   }
-  return /* @__PURE__ */ React.createElement("div", { style: styles.app }, /* @__PURE__ */ React.createElement("link", { rel: "preconnect", href: "https://fonts.googleapis.com" }), /* @__PURE__ */ React.createElement("style", null, FONT_IMPORT), /* @__PURE__ */ React.createElement(Header, { familyId, saving, onLogout, onResetFamily, pendingCount: Object.keys(pendingRequests).length, onOpenRequests: () => setShowRequests(true) }), /* @__PURE__ */ React.createElement("div", { style: styles.body }, tab === "plan" && /* @__PURE__ */ React.createElement(
+  return /* @__PURE__ */ React.createElement("div", { style: styles.app }, /* @__PURE__ */ React.createElement("link", { rel: "preconnect", href: "https://fonts.googleapis.com" }), /* @__PURE__ */ React.createElement("style", null, FONT_IMPORT), /* @__PURE__ */ React.createElement(Header, { familyId, saving, onLogout, onResetFamily, onDeleteAccount, pendingCount: Object.keys(pendingRequests).length, onOpenRequests: () => setShowRequests(true) }), /* @__PURE__ */ React.createElement("div", { style: styles.body }, tab === "plan" && /* @__PURE__ */ React.createElement(
     PlanView,
     {
       planByWeek,
@@ -994,6 +1036,14 @@ function Header({ familyId, saving, onLogout, onResetFamily, pendingCount, onOpe
             style: { fontSize: 11, color: C.muted, background: "none", border: "none", textDecoration: "underline", cursor: "pointer", padding: 0 }
           },
           "\u30ED\u30B0\u30A2\u30A6\u30C8"
+        ),
+        /* @__PURE__ */ React.createElement(
+          "button",
+          {
+            onClick: onDeleteAccount,
+            style: { fontSize: 10, color: "#E1432B", background: "none", border: "none", textDecoration: "underline", cursor: "pointer", padding: 0 }
+          },
+          "\u30A2\u30AB\u30A6\u30F3\u30C8\u524A\u9664"
         )
       )
     )
