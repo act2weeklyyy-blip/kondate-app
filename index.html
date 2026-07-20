@@ -168,6 +168,8 @@ const SLOTS = [
   { key: "lunch", label: "\u663C\u98DF" },
   { key: "dinner", label: "\u5915\u98DF" }
 ];
+const DEFAULT_SLOT_SEL = { breakfast: true, lunch: true, dinner: true };
+const WEEKEND_DAYS = ["\u65E5", "\u571F"];
 const uid = () => Math.random().toString(36).slice(2, 10);
 function toISODate(d) {
   const y = d.getFullYear();
@@ -436,7 +438,7 @@ function MealPlanner({ familyId, user, onLogout, onResetFamily }) {
   const [importOpen, setImportOpen] = useState(false);
   const [photoImportOpen, setPhotoImportOpen] = useState(false);
   const [urlImportOpen, setUrlImportOpen] = useState(false);
-  const [mealPrefs, setMealPrefs] = useState({ allergies: "", dislikes: "", family: "" });
+  const [mealPrefs, setMealPrefs] = useState({ allergies: "", dislikes: "", family: "", weekdaySlots: DEFAULT_SLOT_SEL, weekendSlots: DEFAULT_SLOT_SEL, extraConditions: "" });
   const [categoryOrder, setCategoryOrder] = useState(CATEGORY_ORDER);
   const [newExtra, setNewExtra] = useState("");
   const skipNextSave = useRef(false);
@@ -460,7 +462,7 @@ function MealPlanner({ familyId, user, onLogout, onResetFamily }) {
         }
         setExtraItems(data.extraItems || []);
         setChecked(data.checked || {});
-        setMealPrefs(data.mealPrefs || { allergies: "", dislikes: "", family: "" });
+        setMealPrefs(data.mealPrefs || { allergies: "", dislikes: "", family: "", weekdaySlots: DEFAULT_SLOT_SEL, weekendSlots: DEFAULT_SLOT_SEL, extraConditions: "" });
         if (Array.isArray(data.categoryOrder) && data.categoryOrder.length) {
           const saved = data.categoryOrder.filter((c) => CATEGORY_ORDER.includes(c));
           const missing = CATEGORY_ORDER.filter((c) => !saved.includes(c));
@@ -731,6 +733,7 @@ function MealPlanner({ familyId, user, onLogout, onResetFamily }) {
     recipes,
     mealPrefs,
     setMealPrefs,
+    todayWeekStart,
     onMergeRecipes: mergePhotoRecipes,
     onApplyWeekPlan: applyAIWeekPlan
   })), pickerFor && /* @__PURE__ */ React.createElement(
@@ -2090,12 +2093,36 @@ function FridgeSuggestSection({ onMergeRecipes }) {
   );
 }
 
-function WeeklyPlanSection({ mealPrefs, setMealPrefs, onApplyWeekPlan }) {
+function WeeklyPlanSection({ mealPrefs, setMealPrefs, todayWeekStart, onApplyWeekPlan }) {
   const [status, setStatus] = useState("idle");
   const [errorMsg, setErrorMsg] = useState("");
   const [preview, setPreview] = useState(null);
-  const [selectedDays, setSelectedDays] = useState({});
+  const [selectedSlots, setSelectedSlots] = useState({});
   const [applied, setApplied] = useState(false);
+
+  const weekdaySlots = mealPrefs.weekdaySlots || DEFAULT_SLOT_SEL;
+  const weekendSlots = mealPrefs.weekendSlots || DEFAULT_SLOT_SEL;
+  const extraConditions = mealPrefs.extraConditions || "";
+
+  const dayInfo = useMemo(() => {
+    const info = {};
+    DAYS.forEach((day, i) => {
+      const date = addDays(todayWeekStart, i);
+      const holidayName = getJapaneseHoliday(date);
+      info[day] = {
+        date,
+        holidayName,
+        isWeekendType: i === 0 || i === 6 || !!holidayName
+      };
+    });
+    return info;
+  }, [todayWeekStart]);
+
+  function toggleGenSlot(group, key) {
+    const current = group === "weekday" ? weekdaySlots : weekendSlots;
+    const next = { ...current, [key]: !current[key] };
+    setMealPrefs({ ...mealPrefs, [group === "weekday" ? "weekdaySlots" : "weekendSlots"]: next });
+  }
 
   async function handleGenerate() {
     setStatus("loading");
@@ -2103,21 +2130,39 @@ function WeeklyPlanSection({ mealPrefs, setMealPrefs, onApplyWeekPlan }) {
     setPreview(null);
     setApplied(false);
     try {
-      const prompt = `\u6B21\u306E\u6761\u4EF6\u3067\u30011\u9031\u9593\u5206(\u65E5\u6708\u706B\u6C34\u6728\u91D1\u571F)\u306E\u671D\u30FB\u663C\u30FB\u665A\u306E\u732E\u7ACB\u3092\u63D0\u6848\u3057\u3066\u304F\u3060\u3055\u3044\u3002
+      const weekdayList = SLOTS.filter((s) => weekdaySlots[s.key]).map((s) => s.label).join("\u30FB") || "\u306A\u3057";
+      const weekendList = SLOTS.filter((s) => weekendSlots[s.key]).map((s) => s.label).join("\u30FB") || "\u306A\u3057";
+      const weekendTypeDays = DAYS.filter((d) => dayInfo[d].isWeekendType);
+      const weekdayTypeDays = DAYS.filter((d) => !dayInfo[d].isWeekendType);
+      const prompt = `\u6B21\u306E\u6761\u4EF6\u3067\u30011\u9031\u9593\u5206(\u65E5\u6708\u706B\u6C34\u6728\u91D1\u571F)\u306E\u732E\u7ACB\u3092\u63D0\u6848\u3057\u3066\u304F\u3060\u3055\u3044\u3002
 
 \u30A2\u30EC\u30EB\u30AE\u30FC: ${mealPrefs.allergies || "\u306A\u3057"}
 \u82E6\u624B\u306A\u98DF\u6750: ${mealPrefs.dislikes || "\u306A\u3057"}
 \u5BB6\u65CF\u69CB\u6210: ${mealPrefs.family || "\u672A\u8A18\u5165"}
-
-\u6761\u4EF6\u306B\u5F53\u3066\u306F\u307E\u308B\u98DF\u6750\u306F\u7D76\u5BFE\u306B\u4F7F\u308F\u306A\u3044\u3067\u304F\u3060\u3055\u3044\u3002\u665A\u9023\u306F\u3067\u304D\u308B\u3060\u3051\u4E3B\u83DC(\u30E1\u30A4\u30F3\u306E\u304A\u304B\u305A)\u3068\u526F\u83DC(\u4ED8\u3051\u5408\u308F\u305B)\u306E2\u54C1\u76EE\u306B\u5206\u3051\u3066\u304F\u3060\u3055\u3044\u3002\u671D\u30FB\u663C\u306F1\u54C1\u76EE\u3067\u69CB\u3044\u307E\u305B\u3093\u3002\u6B21\u306EJSON\u5F62\u5F0F\u306E\u307F\u3092\u51FA\u529B\u3057\u3066\u304F\u3060\u3055\u3044(\u8AAC\u660E\u6587\u3084\u30B3\u30FC\u30C9\u30D6\u30ED\u30C3\u30AF\u306F\u4E00\u5207\u4E0D\u8981): {"\u65E5": {"breakfast": [{"name": "..", "role": "\u4E3B\u83DC", "ingredients": [{"name":"..","amount":".."}]}], "lunch": [{"name":"..","role":"\u4E3B\u83DC","ingredients":[...]}], "dinner": [{"name":"..","role":"\u4E3B\u83DC","ingredients":[...]},{"name":"..","role":"\u526F\u83DC","ingredients":[...]}]}, "\u6708": {...}, "\u706B": {...}, "\u6C34": {...}, "\u6728": {...}, "\u91D1": {...}, "\u571F": {...}}`;
+\u5E73\u65E5(${weekdayTypeDays.join("\u30FB") || "\u306A\u3057"})\u306B\u5FC5\u8981\u306A\u98DF\u4E8B: ${weekdayList}
+\u571F\u65E5\u30FB\u795D\u65E5(${weekendTypeDays.join("\u30FB") || "\u306A\u3057"})\u306B\u5FC5\u8981\u306A\u98DF\u4E8B: ${weekendList}
+${extraConditions ? `\u8FFD\u52A0\u306E\u8981\u671B: ${extraConditions}
+` : ""}
+\u6761\u4EF6\u306B\u5F53\u3066\u306F\u307E\u308B\u98DF\u6750\u306F\u7D76\u5BFE\u306B\u4F7F\u308F\u306A\u3044\u3067\u304F\u3060\u3055\u3044\u3002\u665A\u9023\u306F\u3067\u304D\u308B\u3060\u3051\u4E3B\u83DC(\u30E1\u30A4\u30F3\u306E\u304A\u304B\u305A)\u3068\u526F\u83DC(\u4ED8\u3051\u5408\u308F\u305B)\u306E2\u54C1\u76EE\u306B\u5206\u3051\u3066\u304F\u3060\u3055\u3044\u3002\u671D\u30FB\u663C\u306F1\u54C1\u76EE\u3067\u69CB\u3044\u307E\u305B\u3093\u3002\u4E0A\u8A18\u3067\u4E0D\u8981\u3068\u3055\u308C\u3066\u3044\u308B\u98DF\u4E8B\u306E\u9805\u76EE\u306F\u7A7A\u914D\u5217[]\u306B\u3057\u3066\u304F\u3060\u3055\u3044\u3002\u6B21\u306EJSON\u5F62\u5F0F\u306E\u307F\u3092\u51FA\u529B\u3057\u3066\u304F\u3060\u3055\u3044(\u8AAC\u660E\u6587\u3084\u30B3\u30FC\u30C9\u30D6\u30ED\u30C3\u30AF\u306F\u4E00\u5207\u4E0D\u8981): {"\u65E5": {"breakfast": [{"name": "..", "role": "\u4E3B\u83DC", "ingredients": [{"name":"..","amount":".."}]}], "lunch": [{"name":"..","role":"\u4E3B\u83DC","ingredients":[...]}], "dinner": [{"name":"..","role":"\u4E3B\u83DC","ingredients":[...]},{"name":"..","role":"\u526F\u83DC","ingredients":[...]}]}, "\u6708": {...}, "\u706B": {...}, "\u6C34": {...}, "\u6728": {...}, "\u91D1": {...}, "\u571F": {...}}`;
       const text = await callGemini(prompt);
       const parsed = extractJson(text);
+      DAYS.forEach((day) => {
+        if (!parsed[day]) return;
+        const allow = dayInfo[day].isWeekendType ? weekendSlots : weekdaySlots;
+        SLOTS.forEach((s) => {
+          if (!allow[s.key]) parsed[day][s.key] = [];
+        });
+      });
       setPreview(parsed);
       const initSel = {};
       DAYS.forEach((d) => {
-        if (parsed[d]) initSel[d] = true;
+        if (!parsed[d]) return;
+        initSel[d] = {};
+        SLOTS.forEach((s) => {
+          initSel[d][s.key] = Array.isArray(parsed[d][s.key]) && parsed[d][s.key].length > 0;
+        });
       });
-      setSelectedDays(initSel);
+      setSelectedSlots(initSel);
       setStatus("done");
     } catch (err) {
       setErrorMsg(err.message || String(err));
@@ -2125,14 +2170,26 @@ function WeeklyPlanSection({ mealPrefs, setMealPrefs, onApplyWeekPlan }) {
     }
   }
 
-  function toggleDay(day) {
-    setSelectedDays((s) => ({ ...s, [day]: !s[day] }));
+  function toggleSlot(day, slotKey) {
+    setSelectedSlots((s) => ({
+      ...s,
+      [day]: { ...s[day], [slotKey]: !(s[day] && s[day][slotKey]) }
+    }));
   }
 
   function handleApply() {
     const filtered = {};
     Object.entries(preview).forEach(([day, slots]) => {
-      if (selectedDays[day]) filtered[day] = slots;
+      const sel = selectedSlots[day] || {};
+      const picked = {};
+      let any = false;
+      SLOTS.forEach((s) => {
+        if (sel[s.key] && Array.isArray(slots[s.key]) && slots[s.key].length) {
+          picked[s.key] = slots[s.key];
+          any = true;
+        }
+      });
+      if (any) filtered[day] = picked;
     });
     onApplyWeekPlan(filtered);
     setApplied(true);
@@ -2142,6 +2199,22 @@ function WeeklyPlanSection({ mealPrefs, setMealPrefs, onApplyWeekPlan }) {
     if (!Array.isArray(list) || list.length === 0) return "-";
     return list.map((m) => m.name).join(" + ");
   }
+
+  function slotGenToggleStyle(active) {
+    return {
+      fontSize: 11,
+      padding: "4px 10px",
+      borderRadius: 999,
+      border: `1px solid ${active ? C.mustard : C.line}`,
+      background: active ? C.mustard : "transparent",
+      color: active ? C.panel : C.muted,
+      cursor: "pointer"
+    };
+  }
+
+  const anySlotSelected = Object.values(selectedSlots).some(
+    (day) => day && Object.values(day).some(Boolean)
+  );
 
   return /* @__PURE__ */ React.createElement(
     "div",
@@ -2167,6 +2240,39 @@ function WeeklyPlanSection({ mealPrefs, setMealPrefs, onApplyWeekPlan }) {
       placeholder: "\u4F8B: \u5927\u4EBA2\u4EBA\u3001\u5C0F\u5B663\u6B73",
       style: inputStyle
     }),
+    /* @__PURE__ */ React.createElement("label", { style: { ...labelStyle, marginTop: 14 } }, "\u751F\u6210\u3059\u308B\u98DF\u4E8B(\u4EFB\u610F)"),
+    /* @__PURE__ */ React.createElement(
+      "div",
+      { style: { display: "flex", flexDirection: "column", gap: 6 } },
+      /* @__PURE__ */ React.createElement(
+        "div",
+        { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" } },
+        /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: C.muted, width: 70 } }, "\u5E73\u65E5"),
+        SLOTS.map((s) => /* @__PURE__ */ React.createElement(
+          "button",
+          { key: s.key, onClick: () => toggleGenSlot("weekday", s.key), style: slotGenToggleStyle(weekdaySlots[s.key]) },
+          s.label
+        ))
+      ),
+      /* @__PURE__ */ React.createElement(
+        "div",
+        { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" } },
+        /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: C.muted, width: 70 } }, "\u571F\u65E5\u30FB\u795D\u65E5"),
+        SLOTS.map((s) => /* @__PURE__ */ React.createElement(
+          "button",
+          { key: s.key, onClick: () => toggleGenSlot("weekend", s.key), style: slotGenToggleStyle(weekendSlots[s.key]) },
+          s.label
+        ))
+      )
+    ),
+    /* @__PURE__ */ React.createElement("label", { style: { ...labelStyle, marginTop: 14 } }, "\u305D\u306E\u4ED6\u306E\u6761\u4EF6\u30FB\u8981\u671B(\u4EFB\u610F)"),
+    /* @__PURE__ */ React.createElement("textarea", {
+      value: extraConditions,
+      onChange: (e) => setMealPrefs({ ...mealPrefs, extraConditions: e.target.value }),
+      placeholder: "\u4F8B: \u5E73\u65E5\u306F\u4F5C\u308A\u7F6E\u304D\u3084\u6642\u77ED\u30EC\u30B7\u30D4\u4E2D\u5FC3\u3067\u3002\u30C0\u30A4\u30A8\u30C3\u30C8\u4E2D\u306A\u306E\u3067\u91CF\u306F\u5C11\u306A\u3081\u306B\u3057\u3066\u307B\u3057\u3044\u3002",
+      rows: 3,
+      style: { ...inputStyle, resize: "vertical", fontFamily: "inherit", lineHeight: 1.6 }
+    }),
     /* @__PURE__ */ React.createElement(
       "button",
       { onClick: handleGenerate, disabled: status === "loading", style: { ...primaryBtnStyle, width: "100%", marginTop: 12 } },
@@ -2175,54 +2281,62 @@ function WeeklyPlanSection({ mealPrefs, setMealPrefs, onApplyWeekPlan }) {
     status === "error" && /* @__PURE__ */ React.createElement("div", { style: { color: C.tomato, fontSize: 13, marginTop: 10 } }, errorMsg),
     preview && /* @__PURE__ */ React.createElement(
       "div",
-      { style: { marginTop: 12, display: "flex", flexDirection: "column", gap: 6 } },
+      { style: { marginTop: 12, display: "flex", flexDirection: "column", gap: 8 } },
       DAYS.map((day) => {
         const d = preview[day];
         if (!d) return null;
-        const on = !!selectedDays[day];
+        const sel = selectedSlots[day] || {};
         return /* @__PURE__ */ React.createElement(
           "div",
           {
             key: day,
-            onClick: () => toggleDay(day),
             style: {
-              display: "flex",
-              gap: 8,
-              alignItems: "flex-start",
               fontSize: 12,
-              color: on ? C.cream : C.muted,
-              background: on ? C.panel2 : "transparent",
-              border: `1px solid ${on ? "transparent" : C.line}`,
+              color: C.cream,
+              background: C.panel2,
               borderRadius: 8,
-              padding: "8px 10px",
-              cursor: "pointer",
-              opacity: on ? 1 : 0.6
+              padding: "8px 10px"
             }
           },
-          /* @__PURE__ */ React.createElement("span", {
-            style: {
-              width: 15,
-              height: 15,
-              marginTop: 1,
-              borderRadius: 4,
-              flexShrink: 0,
-              border: `1.5px solid ${on ? C.mustard : C.muted}`,
-              background: on ? C.mustard : "transparent",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center"
-            }
-          }, on && /* @__PURE__ */ React.createElement(Check, { size: 10, color: "#fff", strokeWidth: 3 })),
+          /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 700, color: C.mustard } }, day),
+          dayInfo[day] && dayInfo[day].holidayName && /* @__PURE__ */ React.createElement("span", { style: { fontSize: 10, color: C.tomato, marginLeft: 6 } }, dayInfo[day].holidayName),
           /* @__PURE__ */ React.createElement(
-            "span",
-            null,
-            /* @__PURE__ */ React.createElement("span", { style: { fontWeight: 700, color: C.mustard } }, day),
-            " \u671D:",
-            slotLabel(d.breakfast),
-            " / \u663C:",
-            slotLabel(d.lunch),
-            " / \u665A:",
-            slotLabel(d.dinner)
+            "div",
+            { style: { display: "flex", flexDirection: "column", gap: 4, marginTop: 4 } },
+            SLOTS.map((s) => {
+              const list = d[s.key];
+              if (!Array.isArray(list) || list.length === 0) return null;
+              const on = !!sel[s.key];
+              return /* @__PURE__ */ React.createElement(
+                "div",
+                {
+                  key: s.key,
+                  onClick: () => toggleSlot(day, s.key),
+                  style: {
+                    display: "flex",
+                    gap: 6,
+                    alignItems: "flex-start",
+                    cursor: "pointer",
+                    opacity: on ? 1 : 0.55
+                  }
+                },
+                /* @__PURE__ */ React.createElement("span", {
+                  style: {
+                    width: 14,
+                    height: 14,
+                    marginTop: 1,
+                    borderRadius: 4,
+                    flexShrink: 0,
+                    border: `1.5px solid ${on ? C.mustard : C.muted}`,
+                    background: on ? C.mustard : "transparent",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center"
+                  }
+                }, on && /* @__PURE__ */ React.createElement(Check, { size: 9, color: "#fff", strokeWidth: 3 })),
+                /* @__PURE__ */ React.createElement("span", null, s.label, ":", slotLabel(list))
+              );
+            })
           )
         );
       })
@@ -2232,9 +2346,9 @@ function WeeklyPlanSection({ mealPrefs, setMealPrefs, onApplyWeekPlan }) {
       {
         onClick: handleApply,
         style: { ...primaryBtnStyle, width: "100%", marginTop: 10 },
-        disabled: !Object.values(selectedDays).some(Boolean)
+        disabled: !anySlotSelected
       },
-      "\u9078\u3093\u3060\u66DC\u65E5\u3092\u4ECA\u9031\u306E\u732E\u7ACB\u8868\u306B\u53CD\u6620"
+      "\u9078\u3093\u3060\u9805\u76EE\u3092\u4ECA\u9031\u306E\u732E\u7ACB\u8868\u306B\u53CD\u6620"
     ),
     applied && /* @__PURE__ */ React.createElement("p", { style: { color: C.mustard, fontSize: 14, fontWeight: 700, marginTop: 10 } }, "\u732E\u7ACB\u8868\u306B\u53CD\u6620\u3057\u307E\u3057\u305F")
   );
@@ -2304,7 +2418,7 @@ function SeasonalSection() {
   );
 }
 
-function AIView({ recipes, mealPrefs, setMealPrefs, onMergeRecipes, onApplyWeekPlan }) {
+function AIView({ recipes, mealPrefs, setMealPrefs, todayWeekStart, onMergeRecipes, onApplyWeekPlan }) {
   const [open, setOpen] = useState("fridge");
   function toggle(key) {
     setOpen((o) => (o === key ? null : key));
@@ -2325,7 +2439,7 @@ function AIView({ recipes, mealPrefs, setMealPrefs, onMergeRecipes, onApplyWeekP
       icon: CalendarDays,
       open: open === "week",
       onToggle: () => toggle("week")
-    }, /* @__PURE__ */ React.createElement(WeeklyPlanSection, { mealPrefs, setMealPrefs, onApplyWeekPlan })),
+    }, /* @__PURE__ */ React.createElement(WeeklyPlanSection, { mealPrefs, setMealPrefs, todayWeekStart, onApplyWeekPlan })),
     /* @__PURE__ */ React.createElement(AICard, {
       title: "\u65EC\u306E\u98DF\u6750\u3092\u6559\u3048\u3066",
       subtitle: "\u4ECA\u306E\u5B63\u7BC0\u306E\u304A\u3059\u3059\u3081\u98DF\u6750",
