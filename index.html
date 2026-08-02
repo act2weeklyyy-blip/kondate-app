@@ -259,16 +259,17 @@ function getJapaneseHoliday(date) {
   const map = holidayMapForYear(date.getFullYear());
   return map[toISODate(date)] || null;
 }
-const CATEGORY_ORDER = ["\u8089\u985E", "\u9B5A\u4ECB\u985E", "\u91CE\u83DC", "\u679C\u7269", "\u5375\u30FB\u4E73\u88FD\u54C1", "\u8C46\u30FB\u5927\u8C46\u88FD\u54C1", "\u7C73\u30FB\u9EBA\u30FB\u30D1\u30F3", "\u8ABF\u5473\u6599\u30FB\u4E7E\u7269", "\u305D\u306E\u4ED6"];
+const CATEGORY_ORDER = ["\u91CE\u83DC", "\u679C\u7269", "\u9B5A\u4ECB\u985E", "\u8089\u985E", "\u7C73\u30FB\u9EBA\u30FB\u30D1\u30F3", "\u8ABF\u5473\u6599\u30FB\u4E7E\u7269", "\u8C46\u30FB\u5927\u8C46\u88FD\u54C1", "\u5375\u30FB\u4E73\u88FD\u54C1", "\u98F2\u6599", "\u305D\u306E\u4ED6"];
 const CATEGORY_KEYWORDS = {
-  \u8089\u985E: ["\u725B\u8089", "\u8C5A\u8089", "\u9D8F\u8089", "\u3072\u304D\u8089", "\u633D\u8089", "\u30D9\u30FC\u30B3\u30F3", "\u30CF\u30E0", "\u30BD\u30FC\u30BB\u30FC\u30B8", "\u624B\u7FBD", "\u3082\u3082\u8089", "\u3080\u306D\u8089", "\u725B", "\u8C5A", "\u9D8F", "\u8089"],
-  \u9B5A\u4ECB\u985E: ["\u9BAD", "\u3055\u3051", "\u9BD6", "\u3055\u3070", "\u307E\u3050\u308D", "\u30DE\u30B0\u30ED", "\u3044\u308F\u3057", "\u3042\u3058", "\u30A8\u30D3", "\u3048\u3073", "\u30A4\u30AB", "\u3044\u304B", "\u305F\u3053", "\u30BF\u30B3", "\u8C9D", "\u3057\u3058\u307F", "\u3042\u3055\u308A", "\u9B5A", "\u523A\u8EAB", "\u5E72\u7269"],
-  \u91CE\u83DC: ["\u3058\u3083\u304C\u3044\u3082", "\u7389\u306D\u304E", "\u305F\u307E\u306D\u304E", "\u306B\u3093\u3058\u3093", "\u4EBA\u53C2", "\u30AD\u30E3\u30D9\u30C4", "\u767D\u83DC", "\u5927\u6839", "\u30D4\u30FC\u30DE\u30F3", "\u304D\u3085\u3046\u308A", "\u30C8\u30DE\u30C8", "\u306A\u3059", "\u306D\u304E", "\u307B\u3046\u308C\u3093\u8349", "\u3082\u3084\u3057", "\u30D6\u30ED\u30C3\u30B3\u30EA\u30FC", "\u30EC\u30BF\u30B9", "\u3057\u3044\u305F\u3051", "\u304D\u306E\u3053", "\u3057\u3081\u3058", "\u751F\u59DC", "\u306B\u3093\u306B\u304F", "\u3054\u307C\u3046", "\u308C\u3093\u3053\u3093", "\u91CE\u83DC"],
-  \u679C\u7269: ["\u308A\u3093\u3054", "\u30D0\u30CA\u30CA", "\u307F\u304B\u3093", "\u3044\u3061\u3054", "\u3076\u3069\u3046", "\u30EC\u30E2\u30F3", "\u68A8", "\u6843", "\u67FF", "\u679C\u7269"],
-  "\u5375\u30FB\u4E73\u88FD\u54C1": ["\u5375", "\u305F\u307E\u3054", "\u725B\u4E73", "\u30C1\u30FC\u30BA", "\u30D0\u30BF\u30FC", "\u30E8\u30FC\u30B0\u30EB\u30C8", "\u751F\u30AF\u30EA\u30FC\u30E0"],
+  \u8089\u985E: ["\u725B\u8089", "\u8C5A\u8089", "\u9D8F\u8089", "\u3072\u304D\u8089", "\u633D\u8089", "\u30D9\u30FC\u30B3\u30F3", "\u30CF\u30E0", "\u30BD\u30FC\u30BB\u30FC\u30B8", "\u30A6\u30A4\u30F3\u30CA\u30FC", "\u624B\u7FBD", "\u3082\u3082\u8089", "\u3080\u306D\u8089", "\u30EC\u30D0\u30FC", "\u30DC\u30F3\u30EC\u30B9", "\u30D0\u30E9\u8089", "\u713C\u8089\u7528", "\u3057\u3083\u3076\u3057\u3083\u3076\u7528\u8089", "\u725B", "\u8C5A", "\u9D8F", "\u8089"],
+  \u9B5A\u4ECB\u985E: ["\u9BAD", "\u3055\u3051", "\u9BD6", "\u3055\u3070", "\u3055\u3093\u307E", "\u307E\u3050\u308D", "\u30DE\u30B0\u30ED", "\u3044\u308F\u3057", "\u3042\u3058", "\u30A8\u30D3", "\u3048\u3073", "\u30A4\u30AB", "\u3044\u304B", "\u305F\u3053", "\u30BF\u30B3", "\u8C9D", "\u3057\u3058\u307F", "\u3042\u3055\u308A", "\u30C4\u30CA", "\u660E\u592A\u5B50", "\u305F\u3089\u3053", "\u3061\u304F\u308F", "\u304B\u307E\u307C\u3053", "\u3055\u3064\u307E\u63DA\u3052", "\u3076\u308A", "\u30D6\u30EA", "\u3072\u3089\u3081", "\u3066\u3093\u3077\u3089\u306E\u30BF\u30CD", "\u9B5A", "\u523A\u8EAB", "\u9B5A\u4ECB", "\u5E72\u7269"],
+  \u91CE\u83DC: ["\u3058\u3083\u304C\u3044\u3082", "\u7389\u306D\u304E", "\u305F\u307E\u306D\u304E", "\u306B\u3093\u3058\u3093", "\u4EBA\u53C2", "\u30AD\u30E3\u30D9\u30C4", "\u767D\u83DC", "\u5927\u6839", "\u30D4\u30FC\u30DE\u30F3", "\u304D\u3085\u3046\u308A", "\u30C8\u30DE\u30C8", "\u306A\u3059", "\u306D\u304E", "\u30CB\u30E9", "\u30D1\u30BB\u30EA", "\u30BB\u30ED\u30EA", "\u304B\u307C\u3061\u3083", "\u3068\u3046\u3082\u308D\u3053\u3057", "\u30BA\u30C3\u30AD\u30FC\u30CB", "\u30A2\u30B9\u30D1\u30E9", "\u30AA\u30AF\u30E9", "\u30AB\u30EA\u30D5\u30E9\u30EF\u30FC", "\u305F\u3051\u306E\u3053", "\u3055\u3084\u3044\u3093\u3052\u3093", "\u30B9\u30CA\u30C3\u30D7\u30A8\u30F3\u30C9\u30A6", "\u307B\u3046\u308C\u3093\u8349", "\u3082\u3084\u3057", "\u30D6\u30ED\u30C3\u30B3\u30EA\u30FC", "\u30EC\u30BF\u30B9", "\u3057\u3044\u305F\u3051", "\u304D\u306E\u3053", "\u3057\u3081\u3058", "\u3048\u306E\u304D", "\u30DE\u30A4\u30BF\u30B1", "\u751F\u59DC", "\u306B\u3093\u306B\u304F", "\u3054\u307C\u3046", "\u308C\u3093\u3053\u3093", "\u307F\u3087\u3046\u304C", "\u30A2\u30DC\u30AB\u30C9", "\u91CE\u83DC"],
+  \u679C\u7269: ["\u308A\u3093\u3054", "\u30D0\u30CA\u30CA", "\u307F\u304B\u3093", "\u3044\u3061\u3054", "\u3076\u3069\u3046", "\u30EC\u30E2\u30F3", "\u68A8", "\u6843", "\u67FF", "\u30E1\u30ED\u30F3", "\u30B9\u30A4\u30AB", "\u30D1\u30A4\u30CA\u30C3\u30D7\u30EB", "\u30AD\u30A6\u30A4", "\u679C\u7269"],
+  "\u5375\u30FB\u4E73\u88FD\u54C1": ["\u5375", "\u305F\u307E\u3054", "\u725B\u4E73", "\u30DF\u30EB\u30AF", "\u30C1\u30FC\u30BA", "\u30D0\u30BF\u30FC", "\u751F\u30AF\u30EA\u30FC\u30E0", "\u30E8\u30FC\u30B0\u30EB\u30C8"],
   "\u8C46\u30FB\u5927\u8C46\u88FD\u54C1": ["\u8C46\u8150", "\u7D0D\u8C46", "\u6CB9\u63DA\u3052", "\u539A\u63DA\u3052", "\u5927\u8C46", "\u8C46"],
-  "\u7C73\u30FB\u9EBA\u30FB\u30D1\u30F3": ["\u7C73", "\u3054\u98EF", "\u30D1\u30F3", "\u3046\u3069\u3093", "\u305D\u3070", "\u30D1\u30B9\u30BF", "\u9EBA", "\u9903\u5B50\u306E\u76AE"],
-  "\u8ABF\u5473\u6599\u30FB\u4E7E\u7269": ["\u5473\u564C", "\u91A4\u6CB9", "\u3057\u3087\u3046\u3086", "\u7802\u7CD6", "\u5869", "\u9162", "\u307F\u308A\u3093", "\u9152", "\u6CB9", "\u3060\u3057", "\u308F\u304B\u3081", "\u6D77\u82D4", "\u306E\u308A", "\u3053\u3093\u3076", "\u6606\u5E03", "\u5C0F\u9EA6\u7C89", "\u7247\u6817\u7C89", "\u30B3\u30F3\u30BD\u30E1", "\u30BD\u30FC\u30B9", "\u30B1\u30C1\u30E3\u30C3\u30D7", "\u30DE\u30E8\u30CD\u30FC\u30BA"]
+  "\u7C73\u30FB\u9EBA\u30FB\u30D1\u30F3": ["\u7C73", "\u3054\u98EF", "\u98EF", "\u30D1\u30F3", "\u98DF\u30D1\u30F3", "\u3046\u3069\u3093", "\u305D\u3070", "\u4E2D\u83EF\u9EBA", "\u30D1\u30B9\u30BF", "\u9EBA", "\u9903\u5B50\u306E\u76AE", "\u30E2\u30C1"],
+  "\u8ABF\u5473\u6599\u30FB\u4E7E\u7269": ["\u5473\u564C", "\u91A4\u6CB9", "\u3057\u3087\u3046\u3086", "\u7802\u7CD6", "\u5869", "\u3053\u3057\u3087\u3046", "\u80E1\u6912", "\u30B3\u30B7\u30E7\u30A6", "\u5510\u8F9B\u5B50", "\u5473\u4ED8\u3051", "\u9152", "\u9162", "\u307F\u308A\u3093", "\u6599\u7406\u9152", "\u6CB9", "\u30AA\u30EA\u30FC\u30D6\u30AA\u30A4\u30EB", "\u3054\u307E\u6CB9", "\u30B5\u30E9\u30C0\u6CB9", "\u3060\u3057", "\u3060\u3057\u306E\u7D20", "\u9C39\u7BC0", "\u308F\u304B\u3081", "\u6D77\u82D4", "\u306E\u308A", "\u3053\u3093\u3076", "\u6606\u5E03", "\u5C0F\u9EA6\u7C89", "\u7247\u6817\u7C89", "\u30D1\u30F3\u7C89", "\u30B3\u30F3\u30BD\u30E1", "\u30AB\u30EC\u30FC\u7C89", "\u30AB\u30EC\u30FC\u30EB\u30FC", "\u30BD\u30FC\u30B9", "\u30DD\u30F3\u9162", "\u3081\u3093\u3064\u3086", "\u30B1\u30C1\u30E3\u30C3\u30D7", "\u30DE\u30E8\u30CD\u30FC\u30BA", "\u306F\u3061\u307F\u3064", "\u304D\u306A\u7C89"],
+  \u98F2\u6599: ["\u304A\u8336", "\u7DD1\u8336", "\u7D05\u8336", "\u9EA6\u8336", "\u30B3\u30FC\u30D2\u30FC", "\u30B8\u30E5\u30FC\u30B9", "\u30DA\u30C3\u30C8\u30DC\u30C8\u30EB", "\u30DF\u30CD\u30E9\u30EB\u30A6\u30A9\u30FC\u30BF\u30FC", "\u70AD\u9178", "\u30D3\u30FC\u30EB", "\u30C1\u30E5\u30FC\u30CF\u30A4", "\u65E5\u672C\u9152", "\u713C\u914E", "\u30EF\u30A4\u30F3"]
 };
 function categorize(name) {
   for (const cat of CATEGORY_ORDER) {
@@ -2814,7 +2815,8 @@ function ShoppingView({ list, extraItems, checked, onToggle, newExtra, setNewExt
         ))
       )
     ),
-    total === 0 ? /* @__PURE__ */ React.createElement("p", { style: { color: C.muted, fontSize: 13, padding: "10px 0 16px" } }, "\u732E\u7ACB\u8868\u306B\u30EC\u30B7\u30D4\u3092\u5272\u308A\u5F53\u3066\u308B\u3068\u3001\u6750\u6599\u304C\u81EA\u52D5\u3067\u3053\u3053\u306B\u96C6\u307E\u308A\u307E\u3059\u3002") : /* @__PURE__ */ React.createElement(
+    total === 0 && /* @__PURE__ */ React.createElement("p", { style: { color: C.muted, fontSize: 13, padding: "10px 0 16px" } }, "\u732E\u7ACB\u8868\u306B\u30EC\u30B7\u30D4\u3092\u5272\u308A\u5F53\u3066\u308B\u3068\u3001\u6750\u6599\u304C\u81EA\u52D5\u3067\u3053\u3053\u306B\u96C6\u307E\u308A\u307E\u3059\u3002"),
+    grouped.groups.length > 0 && /* @__PURE__ */ React.createElement(
       "div",
       { style: { display: "flex", flexDirection: "column" } },
       grouped.groups.map((group) => /* @__PURE__ */ React.createElement("div", { key: group.category, style: { marginBottom: 4 } }, /* @__PURE__ */ React.createElement(
@@ -2840,33 +2842,9 @@ function ShoppingView({ list, extraItems, checked, onToggle, newExtra, setNewExt
           sub: entry.amounts.join(" + "),
           onRemove: entry.manualIds.length ? () => removeEntry(entry) : void 0
         }
-      )))),
-      grouped.doneEntries.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 4 } }, /* @__PURE__ */ React.createElement(
-        "div",
-        {
-          style: {
-            fontSize: 11,
-            fontWeight: 700,
-            color: C.muted,
-            letterSpacing: 0.5,
-            padding: "10px 2px 4px",
-            textTransform: "uppercase"
-          }
-        },
-        "\u6E08\u307F(24\u6642\u9593\u5F8C\u306B\u81EA\u52D5\u3067\u6D88\u3048\u307E\u3059)"
-      ), grouped.doneEntries.map((entry) => /* @__PURE__ */ React.createElement(
-        ShoppingRow,
-        {
-          key: entry.key,
-          checked: true,
-          onToggle: () => onToggle(safeCheckKey(entry.key)),
-          label: entry.label,
-          sub: entry.amounts.join(" + "),
-          onRemove: entry.manualIds.length ? () => removeEntry(entry) : void 0
-        }
-      )))
+      ))))
     ),
-    /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6, padding: "10px 0 4px" } }, /* @__PURE__ */ React.createElement(
+    /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 6, padding: "10px 0 12px" } }, /* @__PURE__ */ React.createElement(
       "input",
       {
         value: newExtra,
@@ -2875,7 +2853,31 @@ function ShoppingView({ list, extraItems, checked, onToggle, newExtra, setNewExt
         placeholder: "\u307B\u3057\u3044\u3082\u306E\u3092\u8FFD\u52A0(\u4F8B: \u5375)",
         style: { ...inputStyle, background: "rgba(255,255,255,0.03)" }
       }
-    ), /* @__PURE__ */ React.createElement("button", { onClick: onAddExtra, style: { ...primaryBtnStyle, flex: "0 0 44px", padding: 0 } }, /* @__PURE__ */ React.createElement(Plus, { size: 16, style: { margin: "0 auto" } })))
+    ), /* @__PURE__ */ React.createElement("button", { onClick: onAddExtra, style: { ...primaryBtnStyle, flex: "0 0 44px", padding: 0 } }, /* @__PURE__ */ React.createElement(Plus, { size: 16, style: { margin: "0 auto" } }))),
+    grouped.doneEntries.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 4 } }, /* @__PURE__ */ React.createElement(
+      "div",
+      {
+        style: {
+          fontSize: 11,
+          fontWeight: 700,
+          color: C.muted,
+          letterSpacing: 0.5,
+          padding: "10px 2px 4px",
+          textTransform: "uppercase"
+        }
+      },
+      "\u6E08\u307F(24\u6642\u9593\u5F8C\u306B\u81EA\u52D5\u3067\u6D88\u3048\u307E\u3059)"
+    ), grouped.doneEntries.map((entry) => /* @__PURE__ */ React.createElement(
+      ShoppingRow,
+      {
+        key: entry.key,
+        checked: true,
+        onToggle: () => onToggle(safeCheckKey(entry.key)),
+        label: entry.label,
+        sub: entry.amounts.join(" + "),
+        onRemove: entry.manualIds.length ? () => removeEntry(entry) : void 0
+      }
+    )))
   ));
 }
 function ShoppingRow({ checked, onToggle, label, sub, onRemove }) {
